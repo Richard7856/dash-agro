@@ -31,3 +31,17 @@ export function generateLote(): string {
   const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
   return `LOTE-${date}-${rand}`
 }
+
+export function generateNumeroCompra(): string {
+  const now = new Date()
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
+  return `COMP-${date}-${rand}`
+}
+
+export function generateNumeroVenta(): string {
+  const now = new Date()
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase()
+  return `VENTA-${date}-${rand}`
+}

@@ -32,27 +32,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: null, error: 'JSON inválido' }, { status: 400 })
   }
 
-  if (!body.nombre_producto || !body.cantidad || !body.precio_unitario) {
+  if (!body.nombre_producto || !body.cantidad || !body.precio_compra_unitario) {
     return NextResponse.json(
-      { data: null, error: 'nombre_producto, cantidad y precio_unitario son requeridos' },
+      { data: null, error: 'nombre_producto, cantidad y precio_compra_unitario son requeridos' },
       { status: 400 }
     )
   }
 
   const cantidad = parseFloat(String(body.cantidad))
-  const precio_unitario = parseFloat(String(body.precio_unitario))
+  const precio_compra_unitario = parseFloat(String(body.precio_compra_unitario))
 
   const payload = {
     ean: body.ean as string | null ?? null,
     sku: (body.sku as string) || generateSKU(),
     nombre_producto: body.nombre_producto as string,
     cantidad,
-    precio_unitario,
-    precio_total: parseFloat((cantidad * precio_unitario).toFixed(2)),
+    precio_compra_unitario,
+    precio_compra_total: parseFloat((cantidad * precio_compra_unitario).toFixed(2)),
     unidad_medida: (body.unidad_medida as string) || 'unidad',
     cantidad_por_caja: body.cantidad_por_caja != null ? parseFloat(String(body.cantidad_por_caja)) : null,
-    cajas_tarima: body.cajas_tarima != null ? parseInt(String(body.cajas_tarima)) : null,
-    lote: (body.lote as string) || generateLote(),
+    cajas_por_tarima: body.cajas_por_tarima != null ? parseInt(String(body.cajas_por_tarima)) : null,
+    numero_lote: (body.numero_lote as string) || generateLote(),
     ubicacion_id: (body.ubicacion_id as string | null) ?? null,
   }
 

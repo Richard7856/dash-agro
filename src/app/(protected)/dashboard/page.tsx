@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { formatMxn, formatDate, todayISO, firstOfMonthISO } from '@/lib/format'
+import { formatMxn, formatDate, todayISO, firstOfMonthISO, generateNumeroCompra, generateNumeroVenta } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import type { Compra, Venta, Persona, Ubicacion, FormaPago } from '@/lib/types/database.types'
@@ -27,7 +27,8 @@ const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
   { value: 'otro', label: 'Otro' },
 ]
 
-const emptyForm = () => ({
+const emptyForm = (type: 'compra' | 'venta' | null = null) => ({
+  numero_folio: type === 'compra' ? generateNumeroCompra() : type === 'venta' ? generateNumeroVenta() : '',
   fecha: todayISO(),
   persona_id: '',
   ubicacion_id: '',
@@ -104,7 +105,7 @@ export default function DashboardPage() {
     setEditTarget(null)
     setShowFabMenu(false)
     setQuickError('')
-    setForm(emptyForm())
+    setForm(emptyForm(type))
   }
 
   function openEdit(type: 'compra' | 'venta', record: Compra | Venta) {
@@ -112,7 +113,11 @@ export default function DashboardPage() {
     setEditTarget({ type, id: record.id })
     setShowFabMenu(false)
     setQuickError('')
+    const folio = type === 'compra'
+      ? (record as Compra).numero_compra ?? ''
+      : (record as Venta).numero_venta ?? ''
     setForm({
+      numero_folio: folio,
       fecha: record.fecha,
       persona_id: record.persona_id ?? '',
       ubicacion_id: record.ubicacion_id ?? '',
@@ -145,7 +150,12 @@ export default function DashboardPage() {
     setSaving(true)
     setQuickError('')
 
+    const isCompra = quickType === 'compra'
+    const folioKey = isCompra ? 'numero_compra' : 'numero_venta'
+    const folioVal = form.numero_folio || (isCompra ? generateNumeroCompra() : generateNumeroVenta())
+
     const payload = {
+      [folioKey]: folioVal,
       fecha: form.fecha,
       persona_id: form.persona_id || null,
       ubicacion_id: form.ubicacion_id || null,
@@ -154,7 +164,7 @@ export default function DashboardPage() {
       notas: form.notas || null,
     }
 
-    const table = quickType === 'compra' ? 'compras' : 'ventas'
+    const table = isCompra ? 'compras' : 'ventas'
 
     let error: { message: string } | null = null
 
@@ -216,7 +226,10 @@ export default function DashboardPage() {
               <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="p-3 flex justify-between items-center">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{(c.personas as { nombre: string } | null)?.nombre ?? '—'}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">{(c.personas as { nombre: string } | null)?.nombre ?? '—'}</p>
+                      {c.numero_compra && <span className="text-xs font-mono text-gray-400">{c.numero_compra}</span>}
+                    </div>
                     <p className="text-xs text-gray-400">{formatDate(c.fecha)} · {c.forma_pago}</p>
                     {c.notas && <p className="text-xs text-gray-500 mt-0.5 italic">{c.notas}</p>}
                   </div>
@@ -258,7 +271,10 @@ export default function DashboardPage() {
               <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="p-3 flex justify-between items-center">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{(v.personas as { nombre: string } | null)?.nombre ?? '—'}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900">{(v.personas as { nombre: string } | null)?.nombre ?? '—'}</p>
+                      {v.numero_venta && <span className="text-xs font-mono text-gray-400">{v.numero_venta}</span>}
+                    </div>
                     <p className="text-xs text-gray-400">{formatDate(v.fecha)} · {v.forma_pago}</p>
                     {v.notas && <p className="text-xs text-gray-500 mt-0.5 italic">{v.notas}</p>}
                   </div>
@@ -335,6 +351,15 @@ export default function DashboardPage() {
               {quickError && (
                 <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{quickError}</p>
               )}
+
+              <FormField label="Folio">
+                <Input
+                  type="text"
+                  value={form.numero_folio}
+                  onChange={(e) => setForm((f) => ({ ...f, numero_folio: e.target.value }))}
+                  placeholder="Auto-generado"
+                />
+              </FormField>
 
               <div className="grid grid-cols-2 gap-3">
                 <FormField label="Fecha" required>

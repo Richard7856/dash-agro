@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { formatMxn, formatDate, todayISO } from '@/lib/format'
+import { formatMxn, formatDate, todayISO, generateNumeroVenta } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -17,6 +17,7 @@ const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
 ]
 
 const emptyForm = () => ({
+  numero_venta: generateNumeroVenta(),
   fecha: todayISO(),
   ubicacion_id: '',
   persona_id: '',
@@ -64,6 +65,7 @@ export default function VentasPage() {
   function openEdit(v: Venta) {
     setEditId(v.id)
     setForm({
+      numero_venta: v.numero_venta ?? '',
       fecha: v.fecha,
       ubicacion_id: v.ubicacion_id ?? '',
       persona_id: v.persona_id ?? '',
@@ -88,6 +90,7 @@ export default function VentasPage() {
     setError('')
 
     const payload = {
+      numero_venta: form.numero_venta || generateNumeroVenta(),
       fecha: form.fecha,
       ubicacion_id: form.ubicacion_id || null,
       persona_id: form.persona_id || null,
@@ -103,7 +106,7 @@ export default function VentasPage() {
       ({ error: err } = await supabase.from('ventas').insert(payload))
     }
 
-    if (err) { setError('Error al guardar. Revisa los datos.'); setSaving(false); return }
+    if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
 
     setSaving(false)
     setView('list')
@@ -133,6 +136,15 @@ export default function VentasPage() {
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+          <FormField label="Folio">
+            <Input
+              type="text"
+              value={form.numero_venta}
+              onChange={(e) => setForm((f) => ({ ...f, numero_venta: e.target.value }))}
+              placeholder="Auto-generado"
+            />
+          </FormField>
 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Fecha" required>
@@ -194,26 +206,34 @@ export default function VentasPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {ventas.map((v) => (
-            <div key={v.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex justify-between items-start gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-green-700">{formatMxn(v.monto)}</p>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
-                    <span>{formatDate(v.fecha)}</span>
-                    {(v.personas as { nombre: string } | null)?.nombre && (
-                      <span>{(v.personas as { nombre: string }).nombre}</span>
-                    )}
-                    <span className="capitalize">{v.forma_pago.replace('_', ' ')}</span>
-                    {(v.ubicaciones as { nombre: string } | null)?.nombre && (
-                      <span>{(v.ubicaciones as { nombre: string }).nombre}</span>
-                    )}
+            <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="p-4">
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-green-700">{formatMxn(v.monto)}</p>
+                      {v.numero_venta && (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{v.numero_venta}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                      <span>{formatDate(v.fecha)}</span>
+                      {(v.personas as { nombre: string } | null)?.nombre && (
+                        <span>{(v.personas as { nombre: string }).nombre}</span>
+                      )}
+                      <span className="capitalize">{v.forma_pago.replace('_', ' ')}</span>
+                      {(v.ubicaciones as { nombre: string } | null)?.nombre && (
+                        <span>{(v.ubicaciones as { nombre: string }).nombre}</span>
+                      )}
+                    </div>
+                    {v.notas && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{v.notas}</p>}
                   </div>
-                  {v.notas && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{v.notas}</p>}
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <button onClick={() => openEdit(v)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">Editar</button>
-                  <button onClick={() => handleDelete(v.id)} className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg">Borrar</button>
-                </div>
+              </div>
+              <div className="flex border-t border-gray-100">
+                <button onClick={() => openEdit(v)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
+                <div className="w-px bg-gray-100" />
+                <button onClick={() => handleDelete(v.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>
               </div>
             </div>
           ))}

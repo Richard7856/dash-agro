@@ -19,11 +19,11 @@ const emptyForm = () => ({
   sku: generateSKU(),
   nombre_producto: '',
   cantidad: '',
-  precio_unitario: '',
+  precio_compra_unitario: '',
   unidad_medida: 'unidad' as UnidadMedida,
   cantidad_por_caja: '',
-  cajas_tarima: '',
-  lote: generateLote(),
+  cajas_por_tarima: '',
+  numero_lote: generateLote(),
   fecha_caducidad: '',
   ubicacion_id: '',
 })
@@ -85,11 +85,11 @@ export default function InventarioPage() {
       sku: r.sku ?? '',
       nombre_producto: r.nombre_producto,
       cantidad: String(r.cantidad),
-      precio_unitario: String(r.precio_unitario),
+      precio_compra_unitario: String(r.precio_compra_unitario),
       unidad_medida: r.unidad_medida,
       cantidad_por_caja: r.cantidad_por_caja != null ? String(r.cantidad_por_caja) : '',
-      cajas_tarima: r.cajas_tarima != null ? String(r.cajas_tarima) : '',
-      lote: r.lote ?? '',
+      cajas_por_tarima: r.cajas_por_tarima != null ? String(r.cajas_por_tarima) : '',
+      numero_lote: r.numero_lote ?? '',
       fecha_caducidad: r.fecha_caducidad ?? '',
       ubicacion_id: r.ubicacion_id ?? '',
     })
@@ -105,28 +105,28 @@ export default function InventarioPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.nombre_producto || !form.cantidad || !form.precio_unitario) {
-      setError('Nombre, cantidad y precio unitario son requeridos')
+    if (!form.nombre_producto || !form.cantidad || !form.precio_compra_unitario) {
+      setError('Nombre, cantidad y precio son requeridos')
       return
     }
     setSaving(true)
     setError('')
 
     const cantidad = parseFloat(form.cantidad)
-    const precio_unitario = parseFloat(form.precio_unitario)
-    const precio_total = parseFloat((cantidad * precio_unitario).toFixed(2))
+    const precio_compra_unitario = parseFloat(form.precio_compra_unitario)
+    const precio_compra_total = parseFloat((cantidad * precio_compra_unitario).toFixed(2))
 
     const payload = {
       ean: form.ean || null,
       sku: form.sku || generateSKU(),
       nombre_producto: form.nombre_producto,
       cantidad,
-      precio_unitario,
-      precio_total,
+      precio_compra_unitario,
+      precio_compra_total,
       unidad_medida: form.unidad_medida,
       cantidad_por_caja: form.cantidad_por_caja ? parseFloat(form.cantidad_por_caja) : null,
-      cajas_tarima: form.cajas_tarima ? parseInt(form.cajas_tarima) : null,
-      lote: form.lote || generateLote(),
+      cajas_por_tarima: form.cajas_por_tarima ? parseInt(form.cajas_por_tarima) : null,
+      numero_lote: form.numero_lote || generateLote(),
       fecha_caducidad: form.fecha_caducidad || null,
       ubicacion_id: form.ubicacion_id || null,
     }
@@ -138,7 +138,7 @@ export default function InventarioPage() {
       ({ error: err } = await supabase.from('inventario_registros').insert(payload))
     }
 
-    if (err) { setError('Error al guardar. Revisa los datos.'); setSaving(false); return }
+    if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
 
     setSaving(false)
     setView('list')
@@ -146,12 +146,12 @@ export default function InventarioPage() {
     loadData()
   }
 
-  const precioTotal = form.cantidad && form.precio_unitario
-    ? (parseFloat(form.cantidad) * parseFloat(form.precio_unitario)).toFixed(2)
+  const precioTotal = form.cantidad && form.precio_compra_unitario
+    ? (parseFloat(form.cantidad) * parseFloat(form.precio_compra_unitario)).toFixed(2)
     : '0.00'
 
   // Stats calculadas del lado cliente
-  const totalValor = registros.reduce((s, r) => s + (r.precio_total ?? 0), 0)
+  const totalValor = registros.reduce((s, r) => s + (r.precio_compra_total ?? 0), 0)
   const vencenProto = registros.filter((r) => {
     const s = getExpiryStatus(r.fecha_caducidad ?? null)
     return s === 'soon' || s === 'expired'
@@ -245,8 +245,8 @@ export default function InventarioPage() {
             <FormField label="Precio unitario" required>
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
-                value={form.precio_unitario}
-                onChange={(e) => setForm((f) => ({ ...f, precio_unitario: e.target.value }))}
+                value={form.precio_compra_unitario}
+                onChange={(e) => setForm((f) => ({ ...f, precio_compra_unitario: e.target.value }))}
                 required
               />
             </FormField>
@@ -268,8 +268,8 @@ export default function InventarioPage() {
             <FormField label="Cajas / tarima">
               <Input
                 type="number" min="0" step="1" placeholder="Opcional"
-                value={form.cajas_tarima}
-                onChange={(e) => setForm((f) => ({ ...f, cajas_tarima: e.target.value }))}
+                value={form.cajas_por_tarima}
+                onChange={(e) => setForm((f) => ({ ...f, cajas_por_tarima: e.target.value }))}
               />
             </FormField>
           </div>
@@ -279,7 +279,7 @@ export default function InventarioPage() {
               <Input type="text" value={form.sku} onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))} />
             </FormField>
             <FormField label="Lote">
-              <Input type="text" value={form.lote} onChange={(e) => setForm((f) => ({ ...f, lote: e.target.value }))} />
+              <Input type="text" value={form.numero_lote} onChange={(e) => setForm((f) => ({ ...f, numero_lote: e.target.value }))} />
             </FormField>
           </div>
 
@@ -358,7 +358,7 @@ export default function InventarioPage() {
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
                       {r.sku && <span>SKU: {r.sku}</span>}
-                      {r.lote && <span>Lote: {r.lote}</span>}
+                      {r.numero_lote && <span>Lote: {r.numero_lote}</span>}
                       {(r.ubicaciones as { nombre: string } | null)?.nombre && (
                         <span>{(r.ubicaciones as { nombre: string }).nombre}</span>
                       )}
@@ -366,7 +366,7 @@ export default function InventarioPage() {
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm">
                       <span className="text-gray-600">{r.cantidad} {r.unidad_medida}</span>
                       <span className="text-gray-400">·</span>
-                      <span className="font-medium text-gray-800">{formatMxn(r.precio_total)}</span>
+                      <span className="font-medium text-gray-800">{formatMxn(r.precio_compra_total)}</span>
                     </div>
                     <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-gray-400">
                       <span>Alta: {formatDate(r.created_at.split('T')[0])}</span>

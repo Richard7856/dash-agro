@@ -24,6 +24,7 @@ interface UbicacionRow {
 
 interface CompraRow {
   id: string
+  numero_compra: string | null
   fecha: string
   ubicacion_id: string | null
   persona_id: string | null
@@ -36,6 +37,7 @@ interface CompraRow {
 
 interface VentaRow {
   id: string
+  numero_venta: string | null
   fecha: string
   ubicacion_id: string | null
   persona_id: string | null
@@ -52,15 +54,16 @@ interface InventarioRegistroRow {
   sku: string | null
   nombre_producto: string
   cantidad: number
-  precio_unitario: number
-  precio_total: number
-  lote: string | null
+  precio_compra_unitario: number
+  precio_compra_total: number
+  numero_lote: string | null
   fecha_caducidad: string | null
   cantidad_por_caja: number | null
-  cajas_tarima: number | null
+  cajas_por_tarima: number | null
   unidad_medida: UnidadMedida
   ubicacion_id: string | null
   created_at: string
+  updated_at: string
 }
 
 // ─── Tipos de UI (con joins opcionales) ────────────────────────────────────
