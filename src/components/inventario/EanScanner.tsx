@@ -34,7 +34,10 @@ export function EanScanner({ onScan, onClose }: EanScannerProps) {
 
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: 10, qrbox: { width: 260, height: 130 } },
+          {
+            fps: 15,
+            // Sin qrbox: se escanea toda la imagen de la cámara (reconoce mejor EAN, UPC, Code 128, etc.)
+          },
           (decoded: string) => {
             if (!scannedRef.current) {
               scannedRef.current = true
