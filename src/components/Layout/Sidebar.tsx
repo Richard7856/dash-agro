@@ -9,6 +9,8 @@ const items = [
   { href: '/inventario', label: 'Inventario' },
   { href: '/compras', label: 'Compras' },
   { href: '/ventas', label: 'Ventas' },
+  { href: '/gastos', label: 'Gastos' },
+  { href: '/bonos', label: 'Bonos gasolina' },
   { href: '/personas', label: 'Personas' },
 ]
 

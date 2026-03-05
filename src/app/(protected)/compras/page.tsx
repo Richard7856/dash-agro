@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { formatMxn, formatDate, todayISO, generateNumeroCompra } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
@@ -39,6 +39,13 @@ export default function ComprasPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // Filtros
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+  const [filtroPago, setFiltroPago] = useState('')
+  const [showFiltros, setShowFiltros] = useState(false)
+
   const loadData = useCallback(async () => {
     const [{ data: comprasData }, { data: personasData }, { data: ubicData }] = await Promise.all([
       supabase
@@ -56,6 +63,33 @@ export default function ComprasPage() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Filtrado en cliente
+  const comprasFiltradas = useMemo(() => {
+    let result = compras
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      result = result.filter((c) =>
+        c.numero_compra?.toLowerCase().includes(q) ||
+        c.descripcion?.toLowerCase().includes(q) ||
+        c.notas?.toLowerCase().includes(q) ||
+        (c.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
+      )
+    }
+    if (filtroDesde) result = result.filter((c) => c.fecha >= filtroDesde)
+    if (filtroHasta) result = result.filter((c) => c.fecha <= filtroHasta)
+    if (filtroPago) result = result.filter((c) => c.forma_pago === filtroPago)
+    return result
+  }, [compras, busqueda, filtroDesde, filtroHasta, filtroPago])
+
+  const hayFiltros = busqueda || filtroDesde || filtroHasta || filtroPago
+
+  function limpiarFiltros() {
+    setBusqueda('')
+    setFiltroDesde('')
+    setFiltroHasta('')
+    setFiltroPago('')
+  }
 
   function openNew() {
     setEditId(null)
@@ -223,15 +257,71 @@ export default function ComprasPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Compras"
-        subtitle={`${compras.length} registros`}
+        subtitle={`${comprasFiltradas.length} de ${compras.length}`}
         action={{ label: 'Nueva compra', onClick: openNew }}
       />
 
-      {compras.length === 0 ? (
-        <EmptyState message="No hay compras registradas" action={{ label: 'Registrar primera', onClick: openNew }} />
+      {/* Búsqueda y filtros */}
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar folio, descripción, persona..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+            />
+          </div>
+          <button
+            onClick={() => setShowFiltros((v) => !v)}
+            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFiltros || (filtroDesde || filtroHasta || filtroPago) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            Filtros {(filtroDesde || filtroHasta || filtroPago) ? '●' : ''}
+          </button>
+        </div>
+
+        {showFiltros && (
+          <div className="bg-gray-50 rounded-xl p-3 flex flex-col gap-2 border border-gray-200">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Desde</label>
+                <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Hasta</label>
+                <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Forma de pago</label>
+              <select value={filtroPago} onChange={(e) => setFiltroPago(e.target.value)}
+                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                <option value="">Todas</option>
+                {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
+              </select>
+            </div>
+            {hayFiltros && (
+              <button onClick={limpiarFiltros} className="text-xs text-red-500 hover:underline text-left">
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {comprasFiltradas.length === 0 ? (
+        hayFiltros
+          ? <p className="text-sm text-gray-400 py-8 text-center">Sin resultados para esta búsqueda</p>
+          : <EmptyState message="No hay compras registradas" action={{ label: 'Registrar primera', onClick: openNew }} />
       ) : (
         <div className="flex flex-col gap-2">
-          {compras.map((c) => (
+          {comprasFiltradas.map((c) => (
             <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div className="p-4">
                 <div className="flex items-start gap-2">

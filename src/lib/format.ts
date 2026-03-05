@@ -39,6 +39,20 @@ export function generateNumeroCompra(): string {
   return `COMP-${date}-${rand}`
 }
 
+/** Returns { inicio, fin, label } for the month at `offset` months before today (0 = current month) */
+export function monthRange(offset: number): { inicio: string; fin: string; label: string } {
+  const now = new Date()
+  const d = new Date(now.getFullYear(), now.getMonth() - offset, 1)
+  const year = d.getFullYear()
+  const month = d.getMonth()
+  const inicio = `${year}-${String(month + 1).padStart(2, '0')}-01`
+  // Last day of the month
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  const fin = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  const label = d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+  return { inicio, fin, label }
+}
+
 export function generateNumeroVenta(): string {
   const now = new Date()
   const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`

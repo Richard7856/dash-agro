@@ -54,6 +54,28 @@ interface VentaRow {
   updated_at: string
 }
 
+interface GastoRow {
+  id: string
+  fecha: string
+  concepto: string
+  monto: number
+  categoria: string | null
+  persona_id: string | null
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface ConversionBonosRow {
+  id: string
+  fecha: string
+  monto_bonos: number
+  monto_efectivo: number
+  persona_id: string | null
+  notas: string | null
+  created_at: string
+}
+
 interface InventarioRegistroRow {
   id: string
   ean: string | null
@@ -86,6 +108,9 @@ export interface Venta extends VentaRow {
   personas?: { nombre: string } | null
   ubicaciones?: { nombre: string } | null
 }
+
+export type Gasto = GastoRow & { personas?: { nombre: string } | null }
+export type ConversionBonos = ConversionBonosRow & { personas?: { nombre: string } | null }
 
 export interface InventarioRegistro extends InventarioRegistroRow {
   ubicaciones?: { nombre: string } | null

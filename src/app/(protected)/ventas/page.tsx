@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { formatMxn, formatDate, todayISO, generateNumeroVenta } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
@@ -22,6 +22,7 @@ const emptyForm = () => ({
   fecha_entrega: '',
   ubicacion_id: '',
   persona_id: '',
+  vendedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
   monto_total: '',
   gastos_extras: '',
@@ -38,6 +39,13 @@ export default function VentasPage() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // Filtros
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+  const [filtroPago, setFiltroPago] = useState('')
+  const [showFiltros, setShowFiltros] = useState(false)
 
   const loadData = useCallback(async () => {
     const [{ data: ventasData }, { data: personasData }, { data: ubicData }] = await Promise.all([
@@ -57,6 +65,34 @@ export default function VentasPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
+  // Filtrado en cliente
+  const ventasFiltradas = useMemo(() => {
+    let result = ventas
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      result = result.filter((v) =>
+        v.numero_venta?.toLowerCase().includes(q) ||
+        v.notas?.toLowerCase().includes(q) ||
+        (v.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
+      )
+    }
+    if (filtroDesde) result = result.filter((v) => v.fecha >= filtroDesde)
+    if (filtroHasta) result = result.filter((v) => v.fecha <= filtroHasta)
+    if (filtroPago) result = result.filter((v) => v.forma_pago === filtroPago)
+    return result
+  }, [ventas, busqueda, filtroDesde, filtroHasta, filtroPago])
+
+  const hayFiltros = busqueda || filtroDesde || filtroHasta || filtroPago
+
+  function limpiarFiltros() {
+    setBusqueda('')
+    setFiltroDesde('')
+    setFiltroHasta('')
+    setFiltroPago('')
+  }
+
+  const vendedores = personas.filter((p) => p.rol === 'Vendedor')
+
   function openNew() {
     setEditId(null)
     setForm(emptyForm())
@@ -72,6 +108,7 @@ export default function VentasPage() {
       fecha_entrega: v.fecha_entrega ?? '',
       ubicacion_id: v.ubicacion_id ?? '',
       persona_id: v.persona_id ?? '',
+      vendedor_id: v.vendedor_id ?? '',
       forma_pago: v.forma_pago,
       monto_total: String(v.monto_total),
       gastos_extras: v.gastos_extras != null ? String(v.gastos_extras) : '',
@@ -99,6 +136,7 @@ export default function VentasPage() {
       fecha_entrega: form.fecha_entrega || null,
       ubicacion_id: form.ubicacion_id || null,
       persona_id: form.persona_id || null,
+      vendedor_id: form.vendedor_id || null,
       forma_pago: form.forma_pago,
       monto_total: parseFloat(form.monto_total),
       gastos_extras: form.gastos_extras ? parseFloat(form.gastos_extras) : 0,
@@ -185,13 +223,22 @@ export default function VentasPage() {
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </Select>
             </FormField>
-            <FormField label="Persona (cliente)">
+            <FormField label="Cliente (persona)">
               <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
-                <option value="">— Ninguna —</option>
+                <option value="">— Ninguno —</option>
                 {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </Select>
             </FormField>
           </div>
+
+          {vendedores.length > 0 && (
+            <FormField label="Vendedor">
+              <Select value={form.vendedor_id} onChange={(e) => setForm((f) => ({ ...f, vendedor_id: e.target.value }))}>
+                <option value="">— Ninguno —</option>
+                {vendedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </Select>
+            </FormField>
+          )}
 
           <FormField label="Ubicación">
             <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value }))}>
@@ -217,15 +264,71 @@ export default function VentasPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Ventas"
-        subtitle={`${ventas.length} registros`}
+        subtitle={`${ventasFiltradas.length} de ${ventas.length}`}
         action={{ label: 'Nueva venta', onClick: openNew }}
       />
 
-      {ventas.length === 0 ? (
-        <EmptyState message="No hay ventas registradas" action={{ label: 'Registrar primera', onClick: openNew }} />
+      {/* Búsqueda y filtros */}
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="flex gap-2">
+          <div className="flex-1 relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar folio, persona, notas..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+            />
+          </div>
+          <button
+            onClick={() => setShowFiltros((v) => !v)}
+            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFiltros || (filtroDesde || filtroHasta || filtroPago) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            Filtros {(filtroDesde || filtroHasta || filtroPago) ? '●' : ''}
+          </button>
+        </div>
+
+        {showFiltros && (
+          <div className="bg-gray-50 rounded-xl p-3 flex flex-col gap-2 border border-gray-200">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Desde</label>
+                <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Hasta</label>
+                <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Forma de pago</label>
+              <select value={filtroPago} onChange={(e) => setFiltroPago(e.target.value)}
+                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                <option value="">Todas</option>
+                {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
+              </select>
+            </div>
+            {hayFiltros && (
+              <button onClick={limpiarFiltros} className="text-xs text-red-500 hover:underline text-left">
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {ventasFiltradas.length === 0 ? (
+        hayFiltros
+          ? <p className="text-sm text-gray-400 py-8 text-center">Sin resultados para esta búsqueda</p>
+          : <EmptyState message="No hay ventas registradas" action={{ label: 'Registrar primera', onClick: openNew }} />
       ) : (
         <div className="flex flex-col gap-2">
-          {ventas.map((v) => (
+          {ventasFiltradas.map((v) => (
             <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div className="p-4">
                 <div className="flex items-start gap-2">
