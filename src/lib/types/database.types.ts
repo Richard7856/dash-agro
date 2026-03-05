@@ -29,7 +29,9 @@ interface CompraRow {
   ubicacion_id: string | null
   persona_id: string | null
   forma_pago: FormaPago
-  monto: number
+  monto_total: number
+  descripcion: string | null
+  gastos: number | null
   notas: string | null
   created_at: string
   updated_at: string
@@ -41,8 +43,12 @@ interface VentaRow {
   fecha: string
   ubicacion_id: string | null
   persona_id: string | null
+  vendedor_id: string | null
   forma_pago: FormaPago
-  monto: number
+  monto_total: number
+  compra_origen_id: string | null
+  fecha_entrega: string | null
+  gastos_extras: number | null
   notas: string | null
   created_at: string
   updated_at: string

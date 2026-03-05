@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: null, error: 'JSON inválido' }, { status: 400 })
   }
 
-  if (!body.fecha || !body.monto) {
-    return NextResponse.json({ data: null, error: 'fecha y monto son requeridos' }, { status: 400 })
+  if (!body.fecha || !body.monto_total) {
+    return NextResponse.json({ data: null, error: 'fecha y monto_total son requeridos' }, { status: 400 })
   }
 
   const forma_pago = (body.forma_pago as string) || 'efectivo'
@@ -51,7 +51,9 @@ export async function POST(req: NextRequest) {
 
   const payload = {
     fecha: body.fecha as string,
-    monto: parseFloat(String(body.monto)),
+    monto_total: parseFloat(String(body.monto_total)),
+    descripcion: (body.descripcion as string | null) ?? null,
+    gastos: body.gastos ? parseFloat(String(body.gastos)) : 0,
     forma_pago,
     ubicacion_id: (body.ubicacion_id as string | null) ?? null,
     persona_id: (body.persona_id as string | null) ?? null,

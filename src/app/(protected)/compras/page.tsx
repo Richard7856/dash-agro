@@ -19,10 +19,12 @@ const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
 const emptyForm = () => ({
   numero_compra: generateNumeroCompra(),
   fecha: todayISO(),
+  descripcion: '',
   ubicacion_id: '',
   persona_id: '',
   forma_pago: 'efectivo' as FormaPago,
-  monto: '',
+  monto_total: '',
+  gastos: '',
   notas: '',
 })
 
@@ -67,10 +69,12 @@ export default function ComprasPage() {
     setForm({
       numero_compra: c.numero_compra ?? '',
       fecha: c.fecha,
+      descripcion: c.descripcion ?? '',
       ubicacion_id: c.ubicacion_id ?? '',
       persona_id: c.persona_id ?? '',
       forma_pago: c.forma_pago,
-      monto: String(c.monto),
+      monto_total: String(c.monto_total),
+      gastos: c.gastos != null ? String(c.gastos) : '',
       notas: c.notas ?? '',
     })
     setError('')
@@ -85,17 +89,19 @@ export default function ComprasPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.fecha || !form.monto) { setError('Fecha y monto son requeridos'); return }
+    if (!form.fecha || !form.monto_total) { setError('Fecha y monto son requeridos'); return }
     setSaving(true)
     setError('')
 
     const payload = {
       numero_compra: form.numero_compra || generateNumeroCompra(),
       fecha: form.fecha,
+      descripcion: form.descripcion || null,
       ubicacion_id: form.ubicacion_id || null,
       persona_id: form.persona_id || null,
       forma_pago: form.forma_pago,
-      monto: parseFloat(form.monto),
+      monto_total: parseFloat(form.monto_total),
+      gastos: form.gastos ? parseFloat(form.gastos) : 0,
       notas: form.notas || null,
     }
 
@@ -151,21 +157,39 @@ export default function ComprasPage() {
             <FormField label="Fecha" required>
               <Input type="date" value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} required />
             </FormField>
-            <FormField label="Monto (MXN)" required>
+            <FormField label="Monto total (MXN)" required>
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
-                value={form.monto}
-                onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
+                value={form.monto_total}
+                onChange={(e) => setForm((f) => ({ ...f, monto_total: e.target.value }))}
                 required
               />
             </FormField>
           </div>
 
-          <FormField label="Forma de pago">
-            <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
-              {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
-            </Select>
+          <FormField label="¿Qué se compró?">
+            <Input
+              type="text"
+              placeholder="Ej. Aguacate Hass 10 cajas"
+              value={form.descripcion}
+              onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+            />
           </FormField>
+
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Forma de pago">
+              <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
+                {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
+              </Select>
+            </FormField>
+            <FormField label="Gastos extra (MXN)">
+              <Input
+                type="number" min="0" step="0.01" placeholder="0.00"
+                value={form.gastos}
+                onChange={(e) => setForm((f) => ({ ...f, gastos: e.target.value }))}
+              />
+            </FormField>
+          </div>
 
           <FormField label="Persona">
             <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
@@ -210,14 +234,15 @@ export default function ComprasPage() {
           {compras.map((c) => (
             <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
               <div className="p-4">
-                <div className="flex justify-between items-start gap-2">
+                <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900">{formatMxn(c.monto)}</p>
+                      <p className="font-semibold text-gray-900">{formatMxn(c.monto_total)}</p>
                       {c.numero_compra && (
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{c.numero_compra}</span>
                       )}
                     </div>
+                    {c.descripcion && <p className="text-sm text-gray-700 mt-0.5">{c.descripcion}</p>}
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
                       <span>{formatDate(c.fecha)}</span>
                       {(c.personas as { nombre: string } | null)?.nombre && (
@@ -227,6 +252,7 @@ export default function ComprasPage() {
                       {(c.ubicaciones as { nombre: string } | null)?.nombre && (
                         <span>{(c.ubicaciones as { nombre: string }).nombre}</span>
                       )}
+                      {c.gastos ? <span>+{formatMxn(c.gastos)} gastos</span> : null}
                     </div>
                     {c.notas && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{c.notas}</p>}
                   </div>

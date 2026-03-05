@@ -87,8 +87,8 @@ export default function DashboardPage() {
       supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
     ])
 
-    const totalC = (comprasData ?? []).reduce((s, r) => s + (r.monto ?? 0), 0)
-    const totalV = (ventasData ?? []).reduce((s, r) => s + (r.monto ?? 0), 0)
+    const totalC = (comprasData ?? []).reduce((s, r) => s + (r.monto_total ?? 0), 0)
+    const totalV = (ventasData ?? []).reduce((s, r) => s + (r.monto_total ?? 0), 0)
 
     setStats({ totalCompras: totalC, totalVentas: totalV, entradasInventario: invData?.length ?? 0 })
     setCompras((comprasData ?? []) as Compra[])
@@ -122,7 +122,7 @@ export default function DashboardPage() {
       persona_id: record.persona_id ?? '',
       ubicacion_id: record.ubicacion_id ?? '',
       forma_pago: record.forma_pago,
-      monto: String(record.monto),
+      monto: String(record.monto_total),
       notas: record.notas ?? '',
     })
   }
@@ -160,7 +160,7 @@ export default function DashboardPage() {
       persona_id: form.persona_id || null,
       ubicacion_id: form.ubicacion_id || null,
       forma_pago: form.forma_pago,
-      monto: parseFloat(form.monto),
+      monto_total: parseFloat(form.monto),
       notas: form.notas || null,
     }
 
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-gray-400">{formatDate(c.fecha)} · {c.forma_pago}</p>
                     {c.notas && <p className="text-xs text-gray-500 mt-0.5 italic">{c.notas}</p>}
                   </div>
-                  <span className="text-sm font-semibold text-gray-700">{formatMxn(c.monto)}</span>
+                  <span className="text-sm font-semibold text-gray-700">{formatMxn(c.monto_total)}</span>
                 </div>
                 <div className="flex border-t border-gray-100">
                   <button
@@ -278,7 +278,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-gray-400">{formatDate(v.fecha)} · {v.forma_pago}</p>
                     {v.notas && <p className="text-xs text-gray-500 mt-0.5 italic">{v.notas}</p>}
                   </div>
-                  <span className="text-sm font-semibold text-green-700">{formatMxn(v.monto)}</span>
+                  <span className="text-sm font-semibold text-green-700">{formatMxn(v.monto_total)}</span>
                 </div>
                 <div className="flex border-t border-gray-100">
                   <button

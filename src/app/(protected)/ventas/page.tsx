@@ -19,10 +19,12 @@ const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
 const emptyForm = () => ({
   numero_venta: generateNumeroVenta(),
   fecha: todayISO(),
+  fecha_entrega: '',
   ubicacion_id: '',
   persona_id: '',
   forma_pago: 'efectivo' as FormaPago,
-  monto: '',
+  monto_total: '',
+  gastos_extras: '',
   notas: '',
 })
 
@@ -67,10 +69,12 @@ export default function VentasPage() {
     setForm({
       numero_venta: v.numero_venta ?? '',
       fecha: v.fecha,
+      fecha_entrega: v.fecha_entrega ?? '',
       ubicacion_id: v.ubicacion_id ?? '',
       persona_id: v.persona_id ?? '',
       forma_pago: v.forma_pago,
-      monto: String(v.monto),
+      monto_total: String(v.monto_total),
+      gastos_extras: v.gastos_extras != null ? String(v.gastos_extras) : '',
       notas: v.notas ?? '',
     })
     setError('')
@@ -85,17 +89,19 @@ export default function VentasPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.fecha || !form.monto) { setError('Fecha y monto son requeridos'); return }
+    if (!form.fecha || !form.monto_total) { setError('Fecha y monto son requeridos'); return }
     setSaving(true)
     setError('')
 
     const payload = {
       numero_venta: form.numero_venta || generateNumeroVenta(),
       fecha: form.fecha,
+      fecha_entrega: form.fecha_entrega || null,
       ubicacion_id: form.ubicacion_id || null,
       persona_id: form.persona_id || null,
       forma_pago: form.forma_pago,
-      monto: parseFloat(form.monto),
+      monto_total: parseFloat(form.monto_total),
+      gastos_extras: form.gastos_extras ? parseFloat(form.gastos_extras) : 0,
       notas: form.notas || null,
     }
 
@@ -150,28 +156,42 @@ export default function VentasPage() {
             <FormField label="Fecha" required>
               <Input type="date" value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} required />
             </FormField>
-            <FormField label="Monto (MXN)" required>
+            <FormField label="Monto total (MXN)" required>
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
-                value={form.monto}
-                onChange={(e) => setForm((f) => ({ ...f, monto: e.target.value }))}
+                value={form.monto_total}
+                onChange={(e) => setForm((f) => ({ ...f, monto_total: e.target.value }))}
                 required
               />
             </FormField>
           </div>
 
-          <FormField label="Forma de pago">
-            <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
-              {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
-            </Select>
-          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Fecha de entrega">
+              <Input type="date" value={form.fecha_entrega} onChange={(e) => setForm((f) => ({ ...f, fecha_entrega: e.target.value }))} />
+            </FormField>
+            <FormField label="Gastos extra (MXN)">
+              <Input
+                type="number" min="0" step="0.01" placeholder="0.00"
+                value={form.gastos_extras}
+                onChange={(e) => setForm((f) => ({ ...f, gastos_extras: e.target.value }))}
+              />
+            </FormField>
+          </div>
 
-          <FormField label="Persona">
-            <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
-              <option value="">— Ninguna —</option>
-              {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
-          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Forma de pago">
+              <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
+                {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
+              </Select>
+            </FormField>
+            <FormField label="Persona (cliente)">
+              <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
+                <option value="">— Ninguna —</option>
+                {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </Select>
+            </FormField>
+          </div>
 
           <FormField label="Ubicación">
             <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value }))}>
@@ -211,13 +231,14 @@ export default function VentasPage() {
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-green-700">{formatMxn(v.monto)}</p>
+                      <p className="font-semibold text-green-700">{formatMxn(v.monto_total)}</p>
                       {v.numero_venta && (
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{v.numero_venta}</span>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
                       <span>{formatDate(v.fecha)}</span>
+                      {v.fecha_entrega && <span>Entrega: {formatDate(v.fecha_entrega)}</span>}
                       {(v.personas as { nombre: string } | null)?.nombre && (
                         <span>{(v.personas as { nombre: string }).nombre}</span>
                       )}
@@ -225,6 +246,7 @@ export default function VentasPage() {
                       {(v.ubicaciones as { nombre: string } | null)?.nombre && (
                         <span>{(v.ubicaciones as { nombre: string }).nombre}</span>
                       )}
+                      {v.gastos_extras ? <span>+{formatMxn(v.gastos_extras)} extras</span> : null}
                     </div>
                     {v.notas && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{v.notas}</p>}
                   </div>

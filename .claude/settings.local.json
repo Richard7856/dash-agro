@@ -3,5 +3,9 @@
     "allow": [
       "Bash(wc -l src/**/*.tsx src/**/*.ts)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "supabase"
+  ],
+  "enableAllProjectMcpServers": true
 }
