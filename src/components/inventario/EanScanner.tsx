@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import type { Html5Qrcode } from 'html5-qrcode'
+import { Html5QrcodeScannerState } from 'html5-qrcode'
 
 interface EanScannerProps {
   onScan: (ean: string) => void
@@ -9,8 +11,16 @@ interface EanScannerProps {
 
 const SCANNER_ID = 'ean-scanner-container'
 
+function safeStop(scanner: Html5Qrcode | null): void {
+  if (!scanner) return
+  const state = scanner.getState()
+  if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+    scanner.stop().catch(() => {})
+  }
+}
+
 export function EanScanner({ onScan, onClose }: EanScannerProps) {
-  const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null)
+  const scannerRef = useRef<Html5Qrcode | null>(null)
   const scannedRef = useRef(false)
 
   useEffect(() => {
@@ -28,7 +38,7 @@ export function EanScanner({ onScan, onClose }: EanScannerProps) {
           (decoded: string) => {
             if (!scannedRef.current) {
               scannedRef.current = true
-              scanner.stop().catch(() => {})
+              safeStop(scanner)
               onScan(decoded)
             }
           },
@@ -43,7 +53,7 @@ export function EanScanner({ onScan, onClose }: EanScannerProps) {
 
     return () => {
       stopped = true
-      scannerRef.current?.stop().catch(() => {})
+      safeStop(scannerRef.current)
     }
   }, [onScan, onClose])
 
