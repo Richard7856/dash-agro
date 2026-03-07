@@ -13,6 +13,8 @@ import type { InventarioRegistro, Ubicacion, UnidadMedida } from '@/lib/types/da
 const EanScanner = dynamic(() => import('@/components/inventario/EanScanner').then((m) => m.EanScanner), { ssr: false })
 
 const UNIDADES: UnidadMedida[] = ['unidad', 'kg', 'lt', 'caja', 'tarima', 'pieza', 'litro', 'gramo']
+const PAGE_SIZES = [20, 50, 100] as const
+type PageSize = (typeof PAGE_SIZES)[number]
 
 const emptyForm = () => ({
   ean: '',
@@ -51,25 +53,47 @@ export default function InventarioPage() {
   const [scanning, setScanning] = useState(false)
   const [hasCamera, setHasCamera] = useState(false)
 
+  // Paginación
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<PageSize>(20)
+  const [totalCount, setTotalCount] = useState(0)
+  const [refreshKey, setRefreshKey] = useState(0)
+
   useEffect(() => {
     setHasCamera(typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
   }, [])
 
-  const loadData = useCallback(async () => {
-    const [{ data: regs }, { data: ubics }] = await Promise.all([
-      supabase
-        .from('inventario_registros')
-        .select('*, ubicaciones(nombre)')
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
-    ])
-    setRegistros((regs ?? []) as InventarioRegistro[])
-    setUbicaciones(ubics ?? [])
-    setLoading(false)
+  // Ubicaciones: solo una vez al montar
+  useEffect(() => {
+    supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre')
+      .then(({ data }) => setUbicaciones(data ?? []))
   }, [])
 
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    const { data: regs, count } = await supabase
+      .from('inventario_registros')
+      .select('*, ubicaciones(nombre)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to)
+
+    setRegistros((regs ?? []) as InventarioRegistro[])
+    setTotalCount(count ?? 0)
+    setLoading(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, refreshKey])
+
   useEffect(() => { loadData() }, [loadData])
+
+  function forceRefresh() { setRefreshKey((k) => k + 1) }
+
+  function handlePageSizeChange(size: PageSize) {
+    setPage(1)
+    setPageSize(size)
+  }
 
   function openNew() {
     setEditId(null)
@@ -100,7 +124,12 @@ export default function InventarioPage() {
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar este registro?')) return
     await supabase.from('inventario_registros').delete().eq('id', id)
-    setRegistros((rs) => rs.filter((r) => r.id !== id))
+    // Si era el único de la página y hay más páginas, retroceder
+    if (registros.length === 1 && page > 1) {
+      setPage((p) => p - 1)
+    } else {
+      forceRefresh()
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -142,20 +171,25 @@ export default function InventarioPage() {
 
     setSaving(false)
     setView('list')
-    setLoading(true)
-    loadData()
+    // Nuevo registro → ir a página 1 para verlo; edición → quedarse en la misma
+    if (!editId) setPage(1)
+    forceRefresh()
   }
 
   const precioTotal = form.cantidad && form.precio_compra_unitario
     ? (parseFloat(form.cantidad) * parseFloat(form.precio_compra_unitario)).toFixed(2)
     : '0.00'
 
-  // Stats calculadas del lado cliente
-  const totalValor = registros.reduce((s, r) => s + (r.precio_compra_total ?? 0), 0)
+  // Stats de la página actual
+  const totalValorPagina = registros.reduce((s, r) => s + (r.precio_compra_total ?? 0), 0)
   const vencenProto = registros.filter((r) => {
     const s = getExpiryStatus(r.fecha_caducidad ?? null)
     return s === 'soon' || s === 'expired'
   }).length
+
+  const totalPages = Math.ceil(totalCount / pageSize)
+  const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
+  const hasta = Math.min(page * pageSize, totalCount)
 
   if (loading) {
     return (
@@ -312,20 +346,20 @@ export default function InventarioPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Inventario"
-        subtitle={`${registros.length} registros`}
+        subtitle={`${totalCount} registros en total`}
         action={{ label: 'Nuevo registro', onClick: openNew }}
       />
 
-      {/* Stats del inventario */}
-      {registros.length > 0 && (
+      {/* Stats */}
+      {totalCount > 0 && (
         <div className="grid grid-cols-3 gap-2 mb-4">
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-[var(--nm-text-subtle)]">Registros</p>
-            <p className="text-base font-bold text-[var(--nm-text)]">{registros.length}</p>
+            <p className="text-xs text-[var(--nm-text-subtle)]">Total</p>
+            <p className="text-base font-bold text-[var(--nm-text)]">{totalCount}</p>
           </div>
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-[var(--nm-text-subtle)]">Valor total</p>
-            <p className="text-base font-bold text-green-700 truncate">{formatMxn(totalValor)}</p>
+            <p className="text-xs text-[var(--nm-text-subtle)]">Valor página</p>
+            <p className="text-base font-bold text-green-700 truncate">{formatMxn(totalValorPagina)}</p>
           </div>
           <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
             <p className="text-xs text-[var(--nm-text-subtle)]">Vencen pronto</p>
@@ -334,62 +368,127 @@ export default function InventarioPage() {
         </div>
       )}
 
-      {registros.length === 0 ? (
+      {totalCount === 0 ? (
         <EmptyState message="No hay registros de inventario" action={{ label: 'Agregar primero', onClick: openNew }} />
       ) : (
-        <div className="flex flex-col gap-2">
-          {registros.map((r) => {
-            const expiryStatus = getExpiryStatus(r.fecha_caducidad ?? null)
-            return (
-              <div
-                key={r.id}
-                className={`nm-card p-4 ${expiryStatus === 'expired' ? 'border-red-200' : expiryStatus === 'soon' ? 'border-amber-200' : 'border-gray-200'}`}
-              >
-                <div className="flex justify-between items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-[var(--nm-text)] truncate">{r.nombre_producto}</p>
-                      {expiryStatus === 'expired' && (
-                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vencido</span>
-                      )}
-                      {expiryStatus === 'soon' && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vence pronto</span>
-                      )}
+        <>
+          {/* Controles: rango + selector de página */}
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <p className="text-sm text-[var(--nm-text-muted)] shrink-0">
+              {desde}–{hasta} de {totalCount}
+            </p>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-[var(--nm-text-subtle)]">Mostrar</span>
+              {PAGE_SIZES.map((size) => (
+                <button
+                  key={size}
+                  onClick={() => handlePageSizeChange(size)}
+                  className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
+                    pageSize === size
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Lista */}
+          <div className="flex flex-col gap-2">
+            {registros.map((r) => {
+              const expiryStatus = getExpiryStatus(r.fecha_caducidad ?? null)
+              return (
+                <div
+                  key={r.id}
+                  className={`nm-card p-4 ${expiryStatus === 'expired' ? 'border-red-200' : expiryStatus === 'soon' ? 'border-amber-200' : 'border-gray-200'}`}
+                >
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-[var(--nm-text)] truncate">{r.nombre_producto}</p>
+                        {expiryStatus === 'expired' && (
+                          <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vencido</span>
+                        )}
+                        {expiryStatus === 'soon' && (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vence pronto</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
+                        {r.sku && <span>SKU: {r.sku}</span>}
+                        {r.numero_lote && <span>Lote: {r.numero_lote}</span>}
+                        {(r.ubicaciones as { nombre: string } | null)?.nombre && (
+                          <span>{(r.ubicaciones as { nombre: string }).nombre}</span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm">
+                        <span className="text-gray-600">{r.cantidad} {r.unidad_medida}</span>
+                        <span className="text-[var(--nm-text-subtle)]">·</span>
+                        <span className="font-medium text-gray-800">{formatMxn(r.precio_compra_total)}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-[var(--nm-text-subtle)]">
+                        <span>Alta: {formatDate(r.created_at.split('T')[0])}</span>
+                        {r.fecha_caducidad && (
+                          <span className={expiryStatus === 'expired' ? 'text-red-600 font-medium' : expiryStatus === 'soon' ? 'text-amber-600 font-medium' : ''}>
+                            Cad: {formatDate(r.fecha_caducidad)}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
-                      {r.sku && <span>SKU: {r.sku}</span>}
-                      {r.numero_lote && <span>Lote: {r.numero_lote}</span>}
-                      {(r.ubicaciones as { nombre: string } | null)?.nombre && (
-                        <span>{(r.ubicaciones as { nombre: string }).nombre}</span>
-                      )}
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">
+                        Editar
+                      </button>
+                      <button onClick={() => handleDelete(r.id)} className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg">
+                        Borrar
+                      </button>
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm">
-                      <span className="text-gray-600">{r.cantidad} {r.unidad_medida}</span>
-                      <span className="text-[var(--nm-text-subtle)]">·</span>
-                      <span className="font-medium text-gray-800">{formatMxn(r.precio_compra_total)}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-[var(--nm-text-subtle)]">
-                      <span>Alta: {formatDate(r.created_at.split('T')[0])}</span>
-                      {r.fecha_caducidad && (
-                        <span className={expiryStatus === 'expired' ? 'text-red-600 font-medium' : expiryStatus === 'soon' ? 'text-amber-600 font-medium' : ''}>
-                          Cad: {formatDate(r.fecha_caducidad)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-1 shrink-0">
-                    <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">
-                      Editar
-                    </button>
-                    <button onClick={() => handleDelete(r.id)} className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg">
-                      Borrar
-                    </button>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-5 pb-2">
+              <button
+                onClick={() => setPage(1)}
+                disabled={page === 1}
+                className="px-2.5 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Primera página"
+              >
+                «
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ← Anterior
+              </button>
+              <span className="text-sm text-[var(--nm-text-muted)] px-1 min-w-[80px] text-center">
+                {page} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Siguiente →
+              </button>
+              <button
+                onClick={() => setPage(totalPages)}
+                disabled={page === totalPages}
+                className="px-2.5 py-1.5 text-sm rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Última página"
+              >
+                »
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* FAB móvil */}
