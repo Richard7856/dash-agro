@@ -47,6 +47,7 @@ export default function ChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const recordingStartRef = useRef<number>(0)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -117,17 +118,17 @@ export default function ChatPage() {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Use plain MIME types without codec qualifiers — Groq only accepts clean types
-      // audio/webm works on Chrome/Android; audio/mp4 works on iOS/Safari
+      // Plain MIME without codec qualifiers — Groq only accepts clean types
       const mimeType =
         MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
         MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
         ''
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       chunksRef.current = []
-      // timeslice=250ms ensures ondataavailable fires on Android (without it, may never fire)
+      // 100ms timeslice: frequent chunks so we get data even from short recordings
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      recorder.start(250)
+      recorder.start(100)
+      recordingStartRef.current = Date.now()
       mediaRecorderRef.current = recorder
       setRecording(true)
     } catch {
@@ -137,9 +138,24 @@ export default function ChatPage() {
 
   async function stopRecording() {
     const recorder = mediaRecorderRef.current
-    if (!recorder) return
+    if (!recorder || recorder.state === 'inactive') return
+
+    const duration = Date.now() - recordingStartRef.current
     setRecording(false)
+
+    // Ignore accidental taps shorter than 600ms — don't send to Groq
+    if (duration < 600) {
+      recorder.stream.getTracks().forEach((t) => t.stop())
+      recorder.stop()
+      setInput('Mantén el botón presionado mientras hablas 🎤')
+      setTimeout(() => setInput((v) => v === 'Mantén el botón presionado mientras hablas 🎤' ? '' : v), 2500)
+      return
+    }
+
     setTranscribing(true)
+
+    // Force flush remaining data before stopping (fixes Android race condition)
+    try { recorder.requestData() } catch { /* not all browsers support this */ }
 
     await new Promise<void>((resolve) => {
       recorder.onstop = () => resolve()
@@ -147,9 +163,13 @@ export default function ChatPage() {
       recorder.stream.getTracks().forEach((t) => t.stop())
     })
 
+    // Wait 150ms to ensure final ondataavailable callbacks have fired before reading chunks
+    await new Promise((r) => setTimeout(r, 150))
+
     if (chunksRef.current.length === 0) {
       setTranscribing(false)
-      alert('No se capturó audio. Intenta de nuevo y mantén el botón presionado mientras hablas.')
+      setInput('No se capturó audio. Intenta de nuevo 🎤')
+      setTimeout(() => setInput((v) => v === 'No se capturó audio. Intenta de nuevo 🎤' ? '' : v), 2500)
       return
     }
 
@@ -160,9 +180,10 @@ export default function ChatPage() {
 
     const blob = new Blob(chunksRef.current, { type: cleanType })
 
-    if (blob.size < 500) {
+    if (blob.size < 1000) {
       setTranscribing(false)
-      alert('Audio muy corto. Mantén el botón presionado mientras hablas.')
+      setInput('Audio muy corto. Mantén el botón presionado 🎤')
+      setTimeout(() => setInput((v) => v === 'Audio muy corto. Mantén el botón presionado 🎤' ? '' : v), 2500)
       return
     }
 
