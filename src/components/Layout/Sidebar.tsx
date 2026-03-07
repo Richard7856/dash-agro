@@ -14,6 +14,7 @@ const items = [
   { href: '/personas', label: 'Personas' },
   { href: '/clientes', label: 'Clientes' },
   { href: '/proveedores', label: 'Proveedores' },
+  { href: '/chat', label: '🤖 Asistente' },
   { href: '/api-docs', label: 'API Docs' },
   { href: '/configuracion', label: 'Configuración' },
 ]
