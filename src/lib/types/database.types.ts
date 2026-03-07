@@ -12,6 +12,9 @@ interface PersonaRow {
   activo: boolean
   created_at: string
   updated_at: string
+  descripcion_puesto: string | null
+  impacto_operativo: string | null
+  estructura: string | null
 }
 
 interface UbicacionRow {
