@@ -1,16 +1,33 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
 import { formatMxn, formatDate, monthRange, generateNumeroCompra, generateNumeroVenta } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
-import type { Compra, Venta, Persona, Ubicacion, FormaPago } from '@/lib/types/database.types'
+import type { Compra, Venta, Ubicacion, FormaPago } from '@/lib/types/database.types'
+
+// Charts loaded client-only (Recharts doesn't support SSR)
+const WeeklyChart = dynamic(() => import('@/components/dashboard/WeeklyChart'), { ssr: false })
+const PaymentPieChart = dynamic(() => import('@/components/dashboard/PaymentPieChart'), { ssr: false })
 
 interface Stats {
   totalCompras: number
   totalVentas: number
   totalGastos: number
+  valorInventario: number
+}
+
+interface WeeklyEntry {
+  semana: string
+  ventas: number
+  compras: number
+}
+
+interface PaymentEntry {
+  name: string
+  value: number
 }
 
 type QuickType = 'compra' | 'venta' | null
@@ -19,6 +36,9 @@ interface EditTarget {
   type: 'compra' | 'venta'
   id: string
 }
+
+interface Cliente { id: string; nombre: string }
+interface Proveedor { id: string; nombre: string }
 
 const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
   { value: 'efectivo', label: 'Efectivo' },
@@ -30,19 +50,43 @@ const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
 const emptyForm = (type: 'compra' | 'venta' | null = null) => ({
   numero_folio: type === 'compra' ? generateNumeroCompra() : type === 'venta' ? generateNumeroVenta() : '',
   fecha: new Date().toISOString().split('T')[0],
-  persona_id: '',
+  cliente_id: '',
+  proveedor_id: '',
   ubicacion_id: '',
   forma_pago: 'efectivo' as FormaPago,
   monto: '',
   notas: '',
 })
 
+/** Return ISO week string "Sem N" for a date */
+function isoWeekLabel(dateStr: string) {
+  const d = new Date(dateStr + 'T12:00:00')
+  const thursday = new Date(d)
+  thursday.setDate(d.getDate() - ((d.getDay() + 6) % 7) + 3)
+  const firstThursday = new Date(thursday.getFullYear(), 0, 4)
+  const week = 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / 604800000)
+  return `Sem ${week}`
+}
+
+/** Group array of {fecha, monto_total} by ISO week label */
+function groupByWeek(rows: { fecha: string; monto_total: number }[]) {
+  const map: Record<string, number> = {}
+  for (const r of rows) {
+    const label = isoWeekLabel(r.fecha)
+    map[label] = (map[label] ?? 0) + r.monto_total
+  }
+  return map
+}
+
 export default function DashboardPage() {
   const [mesOffset, setMesOffset] = useState(0)
-  const [stats, setStats] = useState<Stats>({ totalCompras: 0, totalVentas: 0, totalGastos: 0 })
+  const [stats, setStats] = useState<Stats>({ totalCompras: 0, totalVentas: 0, totalGastos: 0, valorInventario: 0 })
+  const [weeklyData, setWeeklyData] = useState<WeeklyEntry[]>([])
+  const [paymentData, setPaymentData] = useState<PaymentEntry[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
   const [ventas, setVentas] = useState<Venta[]>([])
-  const [personas, setPersonas] = useState<Persona[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -52,31 +96,39 @@ export default function DashboardPage() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [quickError, setQuickError] = useState('')
-
   const [form, setForm] = useState(emptyForm())
 
-  const { inicio, fin, label: mesLabel } = monthRange(mesOffset)
+  const { label: mesLabel } = monthRange(mesOffset)
 
   const loadData = useCallback(async (offset: number) => {
     const { inicio: ini, fin: fi } = monthRange(offset)
+
+    // Date 42 days ago for weekly chart
+    const hace42 = new Date()
+    hace42.setDate(hace42.getDate() - 42)
+    const hace42str = hace42.toISOString().split('T')[0]
 
     const [
       { data: comprasData },
       { data: ventasData },
       { data: gastosData },
-      { data: personasData },
+      { data: clientesData },
+      { data: proveedoresData },
       { data: ubicData },
+      { data: inventarioData },
+      { data: ventasSemana },
+      { data: comprasSemana },
     ] = await Promise.all([
       supabase
         .from('compras')
-        .select('*, personas(nombre), ubicaciones(nombre)')
+        .select('*, proveedores(nombre), personas(nombre), ubicaciones(nombre)')
         .gte('fecha', ini)
         .lte('fecha', fi)
         .order('fecha', { ascending: false })
         .limit(10),
       supabase
         .from('ventas')
-        .select('*, personas(nombre), ubicaciones(nombre)')
+        .select('*, clientes(nombre), personas(nombre), ubicaciones(nombre)')
         .gte('fecha', ini)
         .lte('fecha', fi)
         .order('fecha', { ascending: false })
@@ -86,19 +138,54 @@ export default function DashboardPage() {
         .select('monto')
         .gte('fecha', ini)
         .lte('fecha', fi),
-      supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+      supabase.from('clientes').select('id, nombre').eq('activo', true).order('nombre'),
+      supabase.from('proveedores').select('id, nombre').eq('activo', true).order('nombre'),
       supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
+      supabase.from('inventario_registros').select('precio_compra_total'),
+      supabase
+        .from('ventas')
+        .select('fecha, monto_total')
+        .gte('fecha', hace42str)
+        .order('fecha', { ascending: true }),
+      supabase
+        .from('compras')
+        .select('fecha, monto_total')
+        .gte('fecha', hace42str)
+        .order('fecha', { ascending: true }),
     ])
 
     const totalC = (comprasData ?? []).reduce((s, r) => s + (r.monto_total ?? 0), 0)
     const totalV = (ventasData ?? []).reduce((s, r) => s + (r.monto_total ?? 0), 0)
     const totalG = (gastosData ?? []).reduce((s, r) => s + (r.monto ?? 0), 0)
+    const valorInv = (inventarioData ?? []).reduce((s, r) => s + (r.precio_compra_total ?? 0), 0)
 
-    setStats({ totalCompras: totalC, totalVentas: totalV, totalGastos: totalG })
+    setStats({ totalCompras: totalC, totalVentas: totalV, totalGastos: totalG, valorInventario: valorInv })
     setCompras((comprasData ?? []) as Compra[])
     setVentas((ventasData ?? []) as Venta[])
-    setPersonas(personasData ?? [])
+    setClientes(clientesData ?? [])
+    setProveedores(proveedoresData ?? [])
     setUbicaciones(ubicData ?? [])
+
+    // Build weekly chart data (last 6 unique weeks)
+    const ventasMap = groupByWeek((ventasSemana ?? []) as { fecha: string; monto_total: number }[])
+    const comprasMap = groupByWeek((comprasSemana ?? []) as { fecha: string; monto_total: number }[])
+    const allWeeks = Array.from(new Set([...Object.keys(ventasMap), ...Object.keys(comprasMap)]))
+      .sort((a, b) => {
+        const na = parseInt(a.replace('Sem ', ''))
+        const nb = parseInt(b.replace('Sem ', ''))
+        return na - nb
+      })
+      .slice(-6)
+    setWeeklyData(allWeeks.map((w) => ({ semana: w, ventas: ventasMap[w] ?? 0, compras: comprasMap[w] ?? 0 })))
+
+    // Build payment pie data from monthly ventas
+    const payMap: Record<string, number> = {}
+    for (const v of (ventasData ?? [])) {
+      const fp = v.forma_pago?.replace('_', ' ') ?? 'otro'
+      payMap[fp] = (payMap[fp] ?? 0) + (v.monto_total ?? 0)
+    }
+    setPaymentData(Object.entries(payMap).map(([name, value]) => ({ name, value })))
+
     setLoading(false)
   }, [])
 
@@ -126,7 +213,8 @@ export default function DashboardPage() {
     setForm({
       numero_folio: folio,
       fecha: record.fecha,
-      persona_id: record.persona_id ?? '',
+      cliente_id: (record as Venta).cliente_id ?? '',
+      proveedor_id: (record as Compra).proveedor_id ?? '',
       ubicacion_id: record.ubicacion_id ?? '',
       forma_pago: record.forma_pago,
       monto: String(record.monto_total),
@@ -143,10 +231,9 @@ export default function DashboardPage() {
   async function handleDelete(type: 'compra' | 'venta', id: string) {
     if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return
     setDeleting(id)
-    const table = type === 'compra' ? 'compras' : 'ventas'
-    const { error } = await supabase.from(table).delete().eq('id', id)
+    const { error } = await supabase.from(type === 'compra' ? 'compras' : 'ventas').delete().eq('id', id)
     setDeleting(null)
-    if (error) { alert('Error al eliminar. Intenta de nuevo.'); return }
+    if (error) { alert('Error al eliminar.'); return }
     setLoading(true)
     loadData(mesOffset)
   }
@@ -164,7 +251,10 @@ export default function DashboardPage() {
     const payload = {
       [folioKey]: folioVal,
       fecha: form.fecha,
-      persona_id: form.persona_id || null,
+      ...(isCompra
+        ? { proveedor_id: form.proveedor_id || null }
+        : { cliente_id: form.cliente_id || null }
+      ),
       ubicacion_id: form.ubicacion_id || null,
       forma_pago: form.forma_pago,
       monto_total: parseFloat(form.monto),
@@ -182,8 +272,7 @@ export default function DashboardPage() {
       error = res.error
     }
 
-    if (error) { setQuickError('Error al guardar. Inténtalo de nuevo.'); setSaving(false); return }
-
+    if (error) { setQuickError('Error al guardar.'); setSaving(false); return }
     closeSheet()
     setSaving(false)
     setLoading(true)
@@ -194,21 +283,32 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen nm-page">
         <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
+  const kpis = [
+    { label: 'Ventas', value: formatMxn(stats.totalVentas), variant: 'nm-card-sm', textColor: 'text-[var(--nm-accent)]' },
+    { label: 'Compras', value: formatMxn(stats.totalCompras), variant: 'nm-card-sm', textColor: 'text-[var(--nm-text)]' },
+    { label: 'Gastos', value: formatMxn(stats.totalGastos), variant: 'nm-card-sm', textColor: 'text-red-600' },
+    { label: 'Utilidad', value: formatMxn(utilidad), variant: utilidad >= 0 ? 'nm-card-green' : 'nm-card-red', textColor: utilidad >= 0 ? 'text-green-800' : 'text-red-700' },
+    { label: 'Inventario', value: formatMxn(stats.valorInventario), variant: 'nm-card-sm', textColor: 'text-[var(--nm-text-muted)]' },
+  ]
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-5">
-      {/* Encabezado con selector de mes */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900 capitalize">{mesLabel}</h1>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--nm-text)] capitalize">{mesLabel}</h1>
+          <p className="text-xs text-[var(--nm-text-subtle)] mt-0.5">Resumen operativo</p>
+        </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setMesOffset((o) => o + 1)}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors"
+            className="nm-btn w-9 h-9 flex items-center justify-center text-[var(--nm-text-muted)]"
             aria-label="Mes anterior"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -218,14 +318,14 @@ export default function DashboardPage() {
           {mesOffset > 0 && (
             <button
               onClick={() => setMesOffset(0)}
-              className="px-2 py-1 text-xs text-green-700 font-medium hover:underline"
+              className="px-2 py-1 text-xs text-[var(--nm-accent)] font-medium hover:underline"
             >
               Hoy
             </button>
           )}
           <button
             onClick={() => setMesOffset((o) => Math.max(0, o - 1))}
-            className={`p-2 rounded-lg transition-colors ${mesOffset === 0 ? 'text-gray-200 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-100'}`}
+            className={`nm-btn w-9 h-9 flex items-center justify-center transition-opacity ${mesOffset === 0 ? 'opacity-30 cursor-not-allowed' : 'text-[var(--nm-text-muted)]'}`}
             disabled={mesOffset === 0}
             aria-label="Mes siguiente"
           >
@@ -236,117 +336,128 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Compras</p>
-          <p className="text-xl font-bold text-gray-900 mt-1">{formatMxn(stats.totalCompras)}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Ventas</p>
-          <p className="text-xl font-bold text-green-700 mt-1">{formatMxn(stats.totalVentas)}</p>
-        </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Gastos</p>
-          <p className="text-xl font-bold text-red-600 mt-1">{formatMxn(stats.totalGastos)}</p>
-        </div>
-        <div className={`rounded-2xl p-4 border shadow-sm ${utilidad >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Utilidad</p>
-          <p className={`text-xl font-bold mt-1 ${utilidad >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-            {formatMxn(utilidad)}
-          </p>
+      {/* KPI strip — horizontal scroll mobile */}
+      <div className="overflow-x-auto -mx-4 px-4 pb-3 mb-5">
+        <div className="flex gap-3" style={{ minWidth: 'max-content' }}>
+          {kpis.map((kpi) => (
+            <div key={kpi.label} className={`${kpi.variant} shrink-0 w-36 md:w-auto md:flex-1 p-4`}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--nm-text-subtle)] mb-1">
+                {kpi.label}
+              </p>
+              <p className={`text-base font-bold leading-tight ${kpi.textColor}`}>{kpi.value}</p>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Últimas compras */}
-      <section className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Últimas compras</h2>
-          <button onClick={() => openQuick('compra')} className="text-xs text-green-700 font-medium hover:underline">+ Agregar</button>
+      {/* Weekly chart */}
+      {weeklyData.length > 0 && (
+        <div className="nm-card p-4 mb-4">
+          <p className="text-xs font-semibold text-[var(--nm-text-muted)] uppercase tracking-wider mb-3">
+            Ventas vs Compras — últimas semanas
+          </p>
+          <WeeklyChart data={weeklyData} />
         </div>
-        {compras.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Sin compras en {mesLabel}</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {compras.map((c) => (
-              <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="p-3 flex justify-between items-center">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-gray-900">{(c.personas as { nombre: string } | null)?.nombre ?? '—'}</p>
-                      {c.numero_compra && <span className="text-xs font-mono text-gray-400">{c.numero_compra}</span>}
-                    </div>
-                    <p className="text-xs text-gray-400">{formatDate(c.fecha)} · {c.forma_pago.replace('_', ' ')}</p>
-                    {c.descripcion && <p className="text-xs text-gray-500 mt-0.5">{c.descripcion}</p>}
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700">{formatMxn(c.monto_total)}</span>
-                </div>
-                <div className="flex border-t border-gray-100">
-                  <button
-                    onClick={() => openEdit('compra', c)}
-                    className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-                  >
-                    Editar
-                  </button>
-                  <div className="w-px bg-gray-100" />
-                  <button
-                    onClick={() => handleDelete('compra', c.id)}
-                    disabled={deleting === c.id}
-                    className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                  >
-                    {deleting === c.id ? '...' : 'Eliminar'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      )}
 
-      {/* Últimas ventas */}
-      <section className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Últimas ventas</h2>
-          <button onClick={() => openQuick('venta')} className="text-xs text-green-700 font-medium hover:underline">+ Agregar</button>
+      {/* Payment pie */}
+      {paymentData.length >= 2 && (
+        <div className="nm-card p-4 mb-5">
+          <p className="text-xs font-semibold text-[var(--nm-text-muted)] uppercase tracking-wider mb-2">
+            Ventas por forma de pago
+          </p>
+          <PaymentPieChart data={paymentData} />
         </div>
-        {ventas.length === 0 ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Sin ventas en {mesLabel}</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {ventas.map((v) => (
-              <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="p-3 flex justify-between items-center">
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-gray-900">{(v.personas as { nombre: string } | null)?.nombre ?? '—'}</p>
-                      {v.numero_venta && <span className="text-xs font-mono text-gray-400">{v.numero_venta}</span>}
-                    </div>
-                    <p className="text-xs text-gray-400">{formatDate(v.fecha)} · {v.forma_pago.replace('_', ' ')}</p>
-                    {v.notas && <p className="text-xs text-gray-500 mt-0.5 italic">{v.notas}</p>}
-                  </div>
-                  <span className="text-sm font-semibold text-green-700">{formatMxn(v.monto_total)}</span>
-                </div>
-                <div className="flex border-t border-gray-100">
-                  <button
-                    onClick={() => openEdit('venta', v)}
-                    className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-                  >
-                    Editar
-                  </button>
-                  <div className="w-px bg-gray-100" />
-                  <button
-                    onClick={() => handleDelete('venta', v.id)}
-                    disabled={deleting === v.id}
-                    className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                  >
-                    {deleting === v.id ? '...' : 'Eliminar'}
-                  </button>
-                </div>
-              </div>
-            ))}
+      )}
+
+      {/* Últimas compras & ventas — 2 columns on desktop */}
+      <div className="grid md:grid-cols-2 gap-4 mb-6">
+        {/* Compras */}
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide">Últimas compras</h2>
+            <button onClick={() => openQuick('compra')} className="text-xs text-[var(--nm-accent)] font-medium hover:underline">+ Agregar</button>
           </div>
-        )}
-      </section>
+          {compras.length === 0 ? (
+            <p className="text-sm text-[var(--nm-text-subtle)] py-4 text-center">Sin compras en {mesLabel}</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {compras.map((c) => {
+                const nombre = (c.proveedores as { nombre: string } | null)?.nombre
+                  ?? (c.personas as { nombre: string } | null)?.nombre
+                  ?? '—'
+                return (
+                  <div key={c.id} className="nm-card-sm overflow-hidden">
+                    <div className="p-3 flex justify-between items-start">
+                      <div className="flex-1 min-w-0 mr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-[var(--nm-text)]">{nombre}</p>
+                          {c.numero_compra && <span className="text-xs font-mono text-[var(--nm-text-subtle)]">{c.numero_compra}</span>}
+                        </div>
+                        <p className="text-xs text-[var(--nm-text-subtle)]">{formatDate(c.fecha)} · {c.forma_pago.replace('_', ' ')}</p>
+                        {c.descripcion && <p className="text-xs text-[var(--nm-text-muted)] mt-0.5 truncate">{c.descripcion}</p>}
+                      </div>
+                      <span className="text-sm font-semibold text-[var(--nm-text)] shrink-0">{formatMxn(c.monto_total)}</span>
+                    </div>
+                    <div className="flex border-t border-[var(--nm-bg-inset)]">
+                      <button onClick={() => openEdit('compra', c)} className="flex-1 py-2 text-xs font-medium text-[var(--nm-accent)] hover:bg-[var(--nm-bg-inset)]/40 transition-colors">
+                        Editar
+                      </button>
+                      <div className="w-px bg-[var(--nm-bg-inset)]" />
+                      <button onClick={() => handleDelete('compra', c.id)} disabled={deleting === c.id} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50/30 transition-colors disabled:opacity-40">
+                        {deleting === c.id ? '...' : 'Eliminar'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Ventas */}
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide">Últimas ventas</h2>
+            <button onClick={() => openQuick('venta')} className="text-xs text-[var(--nm-accent)] font-medium hover:underline">+ Agregar</button>
+          </div>
+          {ventas.length === 0 ? (
+            <p className="text-sm text-[var(--nm-text-subtle)] py-4 text-center">Sin ventas en {mesLabel}</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {ventas.map((v) => {
+                const nombre = (v.clientes as { nombre: string } | null)?.nombre
+                  ?? (v.personas as { nombre: string } | null)?.nombre
+                  ?? '—'
+                return (
+                  <div key={v.id} className="nm-card-sm overflow-hidden">
+                    <div className="p-3 flex justify-between items-start">
+                      <div className="flex-1 min-w-0 mr-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-medium text-[var(--nm-text)]">{nombre}</p>
+                          {v.numero_venta && <span className="text-xs font-mono text-[var(--nm-text-subtle)]">{v.numero_venta}</span>}
+                        </div>
+                        <p className="text-xs text-[var(--nm-text-subtle)]">{formatDate(v.fecha)} · {v.forma_pago.replace('_', ' ')}</p>
+                        {v.notas && <p className="text-xs text-[var(--nm-text-muted)] mt-0.5 truncate italic">{v.notas}</p>}
+                      </div>
+                      <span className="text-sm font-semibold text-[var(--nm-accent)] shrink-0">{formatMxn(v.monto_total)}</span>
+                    </div>
+                    <div className="flex border-t border-[var(--nm-bg-inset)]">
+                      <button onClick={() => openEdit('venta', v)} className="flex-1 py-2 text-xs font-medium text-[var(--nm-accent)] hover:bg-[var(--nm-bg-inset)]/40 transition-colors">
+                        Editar
+                      </button>
+                      <div className="w-px bg-[var(--nm-bg-inset)]" />
+                      <button onClick={() => handleDelete('venta', v.id)} disabled={deleting === v.id} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50/30 transition-colors disabled:opacity-40">
+                        {deleting === v.id ? '...' : 'Eliminar'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      </div>
 
       {/* FAB */}
       <div className="fixed bottom-20 right-4 z-30 md:bottom-6 md:right-6 flex flex-col items-end gap-2">
@@ -354,23 +465,23 @@ export default function DashboardPage() {
           <>
             <button
               onClick={() => openQuick('venta')}
-              className="flex items-center gap-2 bg-white border border-gray-200 shadow-lg rounded-full pl-4 pr-5 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              className="nm-card-sm flex items-center gap-2 pl-4 pr-5 py-2.5 text-sm font-medium text-[var(--nm-text)]"
             >
-              <span className="w-2 h-2 rounded-full bg-green-500" />
+              <span className="w-2 h-2 rounded-full bg-[var(--nm-accent)]" />
               Registrar venta
             </button>
             <button
               onClick={() => openQuick('compra')}
-              className="flex items-center gap-2 bg-white border border-gray-200 shadow-lg rounded-full pl-4 pr-5 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              className="nm-card-sm flex items-center gap-2 pl-4 pr-5 py-2.5 text-sm font-medium text-[var(--nm-text)]"
             >
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              <span className="w-2 h-2 rounded-full bg-gray-400" />
               Registrar compra
             </button>
           </>
         )}
         <button
           onClick={() => setShowFabMenu((v) => !v)}
-          className="w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl transition-all active:scale-95"
+          className="nm-btn-primary w-14 h-14 text-white rounded-full flex items-center justify-center text-2xl font-light shadow-lg active:scale-95"
           aria-label="Agregar registro"
         >
           {showFabMenu ? '✕' : '+'}
@@ -379,23 +490,23 @@ export default function DashboardPage() {
 
       {/* Quick add / edit bottom sheet */}
       {quickType && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={closeSheet}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 backdrop-blur-sm" onClick={closeSheet}>
           <div
-            className="bg-white rounded-t-2xl w-full max-w-lg p-5 pb-safe"
+            className="nm-card rounded-b-none w-full max-w-lg p-5 pb-safe"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900 text-base">
+              <h2 className="font-semibold text-[var(--nm-text)] text-base">
                 {editTarget
                   ? `Editar ${quickType === 'compra' ? 'compra' : 'venta'}`
                   : quickType === 'compra' ? 'Registrar compra' : 'Registrar venta'}
               </h2>
-              <button onClick={closeSheet} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <button onClick={closeSheet} className="text-[var(--nm-text-subtle)] hover:text-[var(--nm-text)] text-xl">✕</button>
             </div>
 
             <form onSubmit={handleQuickSave} className="flex flex-col gap-3">
               {quickError && (
-                <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{quickError}</p>
+                <p className="text-sm text-red-600 bg-red-50/50 rounded-[var(--nm-radius-sm)] px-3 py-2">{quickError}</p>
               )}
 
               <FormField label="Folio">
@@ -430,14 +541,25 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="Persona">
-                  <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
-                    <option value="">— Ninguna —</option>
-                    {personas.map((p) => (
-                      <option key={p.id} value={p.id}>{p.nombre}</option>
-                    ))}
-                  </Select>
-                </FormField>
+                {quickType === 'venta' ? (
+                  <FormField label="Cliente">
+                    <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
+                      <option value="">— Ninguno —</option>
+                      {clientes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nombre}</option>
+                      ))}
+                    </Select>
+                  </FormField>
+                ) : (
+                  <FormField label="Proveedor">
+                    <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
+                      <option value="">— Ninguno —</option>
+                      {proveedores.map((p) => (
+                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                      ))}
+                    </Select>
+                  </FormField>
+                )}
                 <FormField label="Forma de pago">
                   <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
                     {FORMAS_PAGO.map((fp) => (

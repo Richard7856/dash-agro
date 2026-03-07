@@ -117,12 +117,12 @@ export default function BonosPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
         <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
+          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-900">{editId ? 'Editar conversión' : 'Nueva conversión'}</h1>
+          <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar conversión' : 'Nueva conversión'}</h1>
         </div>
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
@@ -191,26 +191,26 @@ export default function BonosPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {bonos.map((b) => (
-            <div key={b.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            <div key={b.id} className="nm-card overflow-hidden">
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-yellow-700">{formatMxn(b.monto_bonos)} bonos</p>
-                      <span className="text-xs text-gray-400">→</span>
+                      <span className="text-xs text-[var(--nm-text-subtle)]">→</span>
                       <p className="font-semibold text-green-700">{formatMxn(b.monto_efectivo)} efectivo</p>
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
                       <span>{formatDate(b.fecha)}</span>
                       {(b.personas as { nombre: string } | null)?.nombre && (
                         <span>{(b.personas as { nombre: string }).nombre}</span>
                       )}
                     </div>
-                    {b.notas && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{b.notas}</p>}
+                    {b.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{b.notas}</p>}
                   </div>
                 </div>
               </div>
-              <div className="flex border-t border-gray-100">
+              <div className="flex border-t border-[var(--nm-bg-inset)]">
                 <button onClick={() => openEdit(b)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
                 <div className="w-px bg-gray-100" />
                 <button onClick={() => handleDelete(b.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>

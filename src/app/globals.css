@@ -6,6 +6,108 @@
   --color-green-600: #16a34a;
   --color-green-700: #15803d;
   --color-green-800: #166534;
+
+  /* Neumorphic surface tokens */
+  --nm-bg:           #e8ede9;
+  --nm-bg-inset:     #d4dcd5;
+  --nm-shadow-light: #ffffff;
+  --nm-shadow-dark:  #bec9bf;
+  --nm-radius:       1.25rem;
+  --nm-radius-sm:    0.875rem;
+
+  /* Text on nm surface */
+  --nm-text:         #2d3a2e;
+  --nm-text-muted:   #5a7060;
+  --nm-text-subtle:  #8aa48e;
+
+  /* Accent */
+  --nm-accent:       #16a34a;
+  --nm-accent-dark:  #15803d;
+}
+
+/* ── Neumorphic utility classes ──────────────────────────────────────────── */
+
+.nm-page {
+  background-color: var(--nm-bg);
+  min-height: 100vh;
+}
+
+.nm-card {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius);
+  box-shadow: 6px 6px 12px var(--nm-shadow-dark), -6px -6px 12px var(--nm-shadow-light);
+}
+
+.nm-card-sm {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius-sm);
+  box-shadow: 4px 4px 8px var(--nm-shadow-dark), -4px -4px 8px var(--nm-shadow-light);
+}
+
+.nm-inset {
+  background: var(--nm-bg-inset);
+  border-radius: var(--nm-radius-sm);
+  box-shadow: inset 3px 3px 7px var(--nm-shadow-dark), inset -3px -3px 7px var(--nm-shadow-light);
+}
+
+.nm-btn {
+  background: var(--nm-bg);
+  border-radius: var(--nm-radius-sm);
+  box-shadow: 4px 4px 8px var(--nm-shadow-dark), -4px -4px 8px var(--nm-shadow-light);
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+.nm-btn:active {
+  box-shadow: inset 2px 2px 5px var(--nm-shadow-dark), inset -2px -2px 5px var(--nm-shadow-light);
+  transform: translateY(1px);
+}
+
+.nm-btn-primary {
+  background: linear-gradient(145deg, #1bbf57, #14923f);
+  border-radius: var(--nm-radius-sm);
+  box-shadow: 4px 4px 8px #a8c9af, -4px -4px 8px #e8fce8;
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+.nm-btn-primary:active {
+  box-shadow: inset 2px 2px 5px #0d7a34, inset -2px -2px 5px #22d96a;
+  transform: translateY(1px);
+}
+
+.nm-input {
+  background: var(--nm-bg-inset);
+  border: none;
+  border-radius: var(--nm-radius-sm);
+  box-shadow: inset 2px 2px 6px var(--nm-shadow-dark), inset -2px -2px 6px var(--nm-shadow-light);
+}
+.nm-input:focus {
+  outline: 2px solid var(--nm-accent);
+  outline-offset: 1px;
+}
+
+.nm-card-green {
+  background: linear-gradient(145deg, #d0e8d4, #c4dfc8);
+  border-radius: var(--nm-radius);
+  box-shadow: 6px 6px 12px #b3ccb7, -6px -6px 12px #e8fce8;
+}
+
+.nm-card-red {
+  background: linear-gradient(145deg, #e8d4d4, #dfc4c4);
+  border-radius: var(--nm-radius);
+  box-shadow: 6px 6px 12px #ccb3b3, -6px -6px 12px #fce8e8;
+}
+
+.nm-nav-active {
+  background: var(--nm-bg-inset);
+  box-shadow: inset 2px 2px 5px var(--nm-shadow-dark), inset -2px -2px 5px var(--nm-shadow-light);
+}
+
+.nm-sidebar {
+  background: var(--nm-bg);
+  box-shadow: 4px 0 10px var(--nm-shadow-dark);
+}
+
+.nm-bottom-nav {
+  background: var(--nm-bg);
+  box-shadow: 0 -3px 8px var(--nm-shadow-dark), 0 -1px 4px var(--nm-shadow-light);
 }
 
 /* Safe area for iPhone notch / home indicator */

@@ -96,8 +96,8 @@ export default function ConfiguracionPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Configuración</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Gestión de claves API</p>
+          <h1 className="text-xl font-bold text-[var(--nm-text)]">Configuración</h1>
+          <p className="text-sm text-[var(--nm-text-muted)] mt-0.5">Gestión de claves API</p>
         </div>
         <Btn onClick={() => setShowModal(true)}>+ Nueva clave</Btn>
       </div>
@@ -114,7 +114,7 @@ export default function ConfiguracionPage() {
           <div className="w-7 h-7 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : keys.length === 0 ? (
-        <div className="text-center py-10 text-gray-400 text-sm">Sin claves generadas. Crea una para empezar.</div>
+        <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">Sin claves generadas. Crea una para empezar.</div>
       ) : (
         <div className="flex flex-col gap-3">
           {keys.map((k) => (
@@ -122,15 +122,15 @@ export default function ConfiguracionPage() {
               <div className="p-4 flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-gray-900">{k.nombre}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${k.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    <p className="font-semibold text-[var(--nm-text)]">{k.nombre}</p>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${k.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-[var(--nm-text-muted)]'}`}>
                       {k.activo ? 'Activa' : 'Revocada'}
                     </span>
                   </div>
-                  <p className="text-sm font-mono text-gray-500 mt-1">
+                  <p className="text-sm font-mono text-[var(--nm-text-muted)] mt-1">
                     {k.key_prefix}<span className="tracking-widest">••••••••••••••••••••••••••••</span>
                   </p>
-                  <div className="flex gap-4 mt-1 text-xs text-gray-400">
+                  <div className="flex gap-4 mt-1 text-xs text-[var(--nm-text-subtle)]">
                     <span>Creada {formatDate(k.created_at.split('T')[0])}</span>
                     {k.last_used_at && <span>Último uso {formatDate(k.last_used_at.split('T')[0])}</span>}
                     {!k.last_used_at && <span>Nunca usada</span>}
@@ -156,10 +156,10 @@ export default function ConfiguracionPage() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4" onClick={closeModal}>
           <div className="bg-white rounded-2xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900">
+              <h2 className="font-semibold text-[var(--nm-text)]">
                 {generatedKey ? '¡Clave generada!' : 'Nueva clave API'}
               </h2>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+              <button onClick={closeModal} className="text-[var(--nm-text-subtle)] hover:text-gray-600 text-xl">✕</button>
             </div>
 
             {generatedKey ? (
@@ -168,7 +168,7 @@ export default function ConfiguracionPage() {
                   ⚠️ <strong>Guarda esta clave ahora.</strong> No se volverá a mostrar.
                 </div>
                 <div className="flex gap-2">
-                  <code className="flex-1 bg-gray-100 rounded-xl px-3 py-2.5 text-sm font-mono text-gray-800 break-all">
+                  <code className="flex-1 nm-inset px-3 py-2.5 text-sm font-mono text-gray-800 break-all">
                     {generatedKey}
                   </code>
                   <button

@@ -177,12 +177,12 @@ export default function InventarioPage() {
         )}
 
         <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
+          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-900">
+          <h1 className="text-xl font-bold text-[var(--nm-text)]">
             {editId ? 'Editar registro' : 'Nuevo registro'}
           </h1>
         </div>
@@ -320,16 +320,16 @@ export default function InventarioPage() {
       {registros.length > 0 && (
         <div className="grid grid-cols-3 gap-2 mb-4">
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-gray-400">Registros</p>
-            <p className="text-base font-bold text-gray-900">{registros.length}</p>
+            <p className="text-xs text-[var(--nm-text-subtle)]">Registros</p>
+            <p className="text-base font-bold text-[var(--nm-text)]">{registros.length}</p>
           </div>
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-gray-400">Valor total</p>
+            <p className="text-xs text-[var(--nm-text-subtle)]">Valor total</p>
             <p className="text-base font-bold text-green-700 truncate">{formatMxn(totalValor)}</p>
           </div>
           <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
-            <p className="text-xs text-gray-400">Vencen pronto</p>
-            <p className={`text-base font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-gray-400'}`}>{vencenProto}</p>
+            <p className="text-xs text-[var(--nm-text-subtle)]">Vencen pronto</p>
+            <p className={`text-base font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
           </div>
         </div>
       )}
@@ -343,12 +343,12 @@ export default function InventarioPage() {
             return (
               <div
                 key={r.id}
-                className={`bg-white rounded-xl border p-4 shadow-sm ${expiryStatus === 'expired' ? 'border-red-200' : expiryStatus === 'soon' ? 'border-amber-200' : 'border-gray-200'}`}
+                className={`nm-card p-4 ${expiryStatus === 'expired' ? 'border-red-200' : expiryStatus === 'soon' ? 'border-amber-200' : 'border-gray-200'}`}
               >
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-gray-900 truncate">{r.nombre_producto}</p>
+                      <p className="font-medium text-[var(--nm-text)] truncate">{r.nombre_producto}</p>
                       {expiryStatus === 'expired' && (
                         <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vencido</span>
                       )}
@@ -356,7 +356,7 @@ export default function InventarioPage() {
                         <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vence pronto</span>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
                       {r.sku && <span>SKU: {r.sku}</span>}
                       {r.numero_lote && <span>Lote: {r.numero_lote}</span>}
                       {(r.ubicaciones as { nombre: string } | null)?.nombre && (
@@ -365,10 +365,10 @@ export default function InventarioPage() {
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm">
                       <span className="text-gray-600">{r.cantidad} {r.unidad_medida}</span>
-                      <span className="text-gray-400">·</span>
+                      <span className="text-[var(--nm-text-subtle)]">·</span>
                       <span className="font-medium text-gray-800">{formatMxn(r.precio_compra_total)}</span>
                     </div>
-                    <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-gray-400">
+                    <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-[var(--nm-text-subtle)]">
                       <span>Alta: {formatDate(r.created_at.split('T')[0])}</span>
                       {r.fecha_caducidad && (
                         <span className={expiryStatus === 'expired' ? 'text-red-600 font-medium' : expiryStatus === 'soon' ? 'text-amber-600 font-medium' : ''}>

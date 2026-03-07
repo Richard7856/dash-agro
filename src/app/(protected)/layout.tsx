@@ -28,14 +28,14 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="nm-page flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="nm-page">
       {/* Sidebar — solo desktop */}
       <div className="hidden md:flex md:w-60 md:flex-col md:fixed md:inset-y-0 z-30">
         <Sidebar />

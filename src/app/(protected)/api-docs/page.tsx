@@ -177,7 +177,7 @@ function EndpointCard({ ep, baseUrl }: { ep: Endpoint; baseUrl: string }) {
       )}' \\\n  "${baseUrl}${ep.path}"`
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="nm-card overflow-hidden">
       <button
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center gap-3 p-4 text-left hover:bg-gray-50 transition-colors"
@@ -186,26 +186,26 @@ function EndpointCard({ ep, baseUrl }: { ep: Endpoint; baseUrl: string }) {
           {ep.method}
         </span>
         <span className="font-mono text-sm text-gray-800 font-medium flex-1">{ep.path}</span>
-        <span className="text-xs text-gray-400 hidden sm:block">{ep.description}</span>
-        <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <span className="text-xs text-[var(--nm-text-subtle)] hidden sm:block">{ep.description}</span>
+        <svg className={`w-4 h-4 text-[var(--nm-text-subtle)] shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       {open && (
-        <div className="border-t border-gray-100 p-4 flex flex-col gap-4">
+        <div className="border-t border-[var(--nm-bg-inset)] p-4 flex flex-col gap-4">
           <p className="text-sm text-gray-600">{ep.description}</p>
 
           {ep.params && ep.params.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Query params</p>
+              <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide mb-2">Query params</p>
               <div className="flex flex-col gap-1">
                 {ep.params.map((p) => (
                   <div key={p.name} className="flex gap-2 text-sm">
                     <code className="text-blue-700 font-mono w-28 shrink-0">{p.name}</code>
-                    <span className="text-gray-400 font-mono text-xs w-14 shrink-0">{p.type}</span>
+                    <span className="text-[var(--nm-text-subtle)] font-mono text-xs w-14 shrink-0">{p.type}</span>
                     <span className="text-gray-600">{p.description}</span>
-                    {!p.required && <span className="text-gray-400 text-xs ml-auto shrink-0">opcional</span>}
+                    {!p.required && <span className="text-[var(--nm-text-subtle)] text-xs ml-auto shrink-0">opcional</span>}
                   </div>
                 ))}
               </div>
@@ -214,16 +214,16 @@ function EndpointCard({ ep, baseUrl }: { ep: Endpoint; baseUrl: string }) {
 
           {ep.body && ep.body.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Body JSON</p>
+              <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide mb-2">Body JSON</p>
               <div className="flex flex-col gap-1">
                 {ep.body.map((p) => (
                   <div key={p.name} className="flex gap-2 text-sm">
                     <code className="text-green-700 font-mono w-36 shrink-0">{p.name}</code>
-                    <span className="text-gray-400 font-mono text-xs w-14 shrink-0">{p.type}</span>
+                    <span className="text-[var(--nm-text-subtle)] font-mono text-xs w-14 shrink-0">{p.type}</span>
                     <span className="text-gray-600 flex-1">{p.description}</span>
                     {p.required
                       ? <span className="text-red-500 text-xs shrink-0">requerido</span>
-                      : <span className="text-gray-400 text-xs shrink-0">opcional</span>}
+                      : <span className="text-[var(--nm-text-subtle)] text-xs shrink-0">opcional</span>}
                   </div>
                 ))}
               </div>
@@ -232,14 +232,14 @@ function EndpointCard({ ep, baseUrl }: { ep: Endpoint; baseUrl: string }) {
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Ejemplo curl</p>
+              <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide">Ejemplo curl</p>
               <CopyButton text={curlGet} />
             </div>
             <pre className="bg-gray-900 text-gray-100 rounded-xl p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">{curlGet}</pre>
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Respuesta ejemplo</p>
+            <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide mb-1">Respuesta ejemplo</p>
             <pre className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs overflow-x-auto">
               {JSON.stringify(ep.exampleResponse, null, 2)}
             </pre>
@@ -260,13 +260,13 @@ export default function ApiDocsPage() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-5">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Documentación API</h1>
-        <p className="text-sm text-gray-500 mt-0.5">REST API v1 — Agrodelicias</p>
+        <h1 className="text-xl font-bold text-[var(--nm-text)]">Documentación API</h1>
+        <p className="text-sm text-[var(--nm-text-muted)] mt-0.5">REST API v1 — Agrodelicias</p>
       </div>
 
       {/* Autenticación */}
-      <section className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold text-gray-900 mb-3">Autenticación</h2>
+      <section className="mb-6 nm-card p-5">
+        <h2 className="font-semibold text-[var(--nm-text)] mb-3">Autenticación</h2>
         <p className="text-sm text-gray-600 mb-3">
           Todos los endpoints requieren el header <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-xs">X-API-Key</code> con una clave activa.
           Genera y administra tus claves en{' '}
@@ -281,10 +281,10 @@ export default function ApiDocsPage() {
       </section>
 
       {/* Base URL */}
-      <section className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold text-gray-900 mb-2">URL base</h2>
+      <section className="mb-6 nm-card p-5">
+        <h2 className="font-semibold text-[var(--nm-text)] mb-2">URL base</h2>
         <div className="flex items-center gap-2">
-          <code className="flex-1 bg-gray-100 rounded-xl px-3 py-2 text-sm font-mono text-gray-800 break-all">
+          <code className="flex-1 nm-inset px-3 py-2 text-sm font-mono text-gray-800 break-all">
             {baseUrl}/api/v1
           </code>
           <CopyButton text={`${baseUrl}/api/v1`} />
@@ -292,8 +292,8 @@ export default function ApiDocsPage() {
       </section>
 
       {/* Respuesta estándar */}
-      <section className="mb-6 bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-semibold text-gray-900 mb-2">Formato de respuesta</h2>
+      <section className="mb-6 nm-card p-5">
+        <h2 className="font-semibold text-[var(--nm-text)] mb-2">Formato de respuesta</h2>
         <p className="text-sm text-gray-600 mb-3">Todas las respuestas usan JSON con la misma estructura:</p>
         <pre className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs overflow-x-auto">
 {`{
@@ -306,7 +306,7 @@ export default function ApiDocsPage() {
   }
 }`}
         </pre>
-        <div className="mt-3 flex gap-4 text-xs text-gray-500">
+        <div className="mt-3 flex gap-4 text-xs text-[var(--nm-text-muted)]">
           <span><span className="font-mono text-green-700">200</span> — OK (GET)</span>
           <span><span className="font-mono text-green-700">201</span> — Creado (POST)</span>
           <span><span className="font-mono text-red-600">401</span> — API key inválida</span>
@@ -316,14 +316,14 @@ export default function ApiDocsPage() {
 
       {/* Resumen tabla */}
       <section className="mb-4">
-        <h2 className="font-semibold text-gray-900 mb-3">Endpoints disponibles</h2>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <h2 className="font-semibold text-[var(--nm-text)] mb-3">Endpoints disponibles</h2>
+        <div className="nm-card overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">Endpoint</th>
-                <th className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase text-center">GET</th>
-                <th className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase text-center">POST</th>
+                <th className="text-left px-4 py-2 text-xs font-semibold text-[var(--nm-text-muted)] uppercase">Endpoint</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[var(--nm-text-muted)] uppercase text-center">GET</th>
+                <th className="px-3 py-2 text-xs font-semibold text-[var(--nm-text-muted)] uppercase text-center">POST</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -346,7 +346,7 @@ export default function ApiDocsPage() {
         ))}
       </div>
 
-      <div className="mt-8 text-center text-xs text-gray-400">
+      <div className="mt-8 text-center text-xs text-[var(--nm-text-subtle)]">
         Administra tus claves en{' '}
         <Link href="/configuracion" className="text-green-700 hover:underline">Configuración</Link>
       </div>

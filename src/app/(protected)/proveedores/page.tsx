@@ -108,12 +108,12 @@ export default function ProveedoresPage() {
   if (view === 'form') return (
     <div className="max-w-2xl mx-auto px-4 py-5">
       <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
+        <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h1 className="text-xl font-bold text-gray-900">{editId ? 'Editar proveedor' : 'Nuevo proveedor'}</h1>
+        <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar proveedor' : 'Nuevo proveedor'}</h1>
       </div>
       <form onSubmit={handleSave} className="flex flex-col gap-4">
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
@@ -164,23 +164,23 @@ export default function ProveedoresPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
+          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-gray-900 truncate">{p.nombre}</h1>
+              <h1 className="text-xl font-bold text-[var(--nm-text)] truncate">{p.nombre}</h1>
               {!p.activo && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">Inactivo</span>}
             </div>
-            <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
+            <div className="flex flex-wrap gap-x-3 text-xs text-[var(--nm-text-subtle)] mt-0.5">
               {p.rfc && <span>RFC: {p.rfc}</span>}
               {p.codigo_postal && <span>CP: {p.codigo_postal}</span>}
               {p.telefono && <span>{p.telefono}</span>}
               {p.email && <span>{p.email}</span>}
             </div>
-            {p.regimen_fiscal && <p className="text-xs text-gray-400 mt-0.5">{p.regimen_fiscal}</p>}
+            {p.regimen_fiscal && <p className="text-xs text-[var(--nm-text-subtle)] mt-0.5">{p.regimen_fiscal}</p>}
           </div>
           <Btn variant="secondary" size="sm" onClick={() => openEdit(p)}>Editar</Btn>
         </div>
@@ -192,20 +192,20 @@ export default function ProveedoresPage() {
             <div className="w-7 h-7 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : compras.length === 0 ? (
-          <div className="text-center py-10 text-gray-400 text-sm">Sin compras registradas para este proveedor.</div>
+          <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">Sin compras registradas para este proveedor.</div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-xs text-gray-400 mb-1">{compras.length} compra{compras.length !== 1 ? 's' : ''} registrada{compras.length !== 1 ? 's' : ''}</p>
+            <p className="text-xs text-[var(--nm-text-subtle)] mb-1">{compras.length} compra{compras.length !== 1 ? 's' : ''} registrada{compras.length !== 1 ? 's' : ''}</p>
             {compras.map((c, i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-xl p-3.5 flex items-start gap-3">
                 <span className="shrink-0 text-xs font-semibold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full mt-0.5">Compra</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-gray-900">{formatMxn(c.monto_total)}</span>
-                    <span className="text-xs text-gray-400">{formatDate(c.fecha)}</span>
+                    <span className="text-sm font-medium text-[var(--nm-text)]">{formatMxn(c.monto_total)}</span>
+                    <span className="text-xs text-[var(--nm-text-subtle)]">{formatDate(c.fecha)}</span>
                   </div>
-                  {c.numero_compra && <p className="text-xs text-gray-400">#{c.numero_compra}</p>}
-                  {c.descripcion && <p className="text-xs text-gray-500 mt-0.5 truncate">{c.descripcion}</p>}
+                  {c.numero_compra && <p className="text-xs text-[var(--nm-text-subtle)]">#{c.numero_compra}</p>}
+                  {c.descripcion && <p className="text-xs text-[var(--nm-text-muted)] mt-0.5 truncate">{c.descripcion}</p>}
                 </div>
               </div>
             ))}
@@ -220,14 +220,14 @@ export default function ProveedoresPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Proveedores</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{proveedores.filter((p) => p.activo).length} activos</p>
+          <h1 className="text-xl font-bold text-[var(--nm-text)]">Proveedores</h1>
+          <p className="text-sm text-[var(--nm-text-muted)] mt-0.5">{proveedores.filter((p) => p.activo).length} activos</p>
         </div>
         <Btn onClick={openNew} className="hidden md:flex">+ Nuevo proveedor</Btn>
       </div>
 
       <div className="relative mb-4">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
         </svg>
         <input type="text" placeholder="Buscar por nombre o RFC..." value={search}
@@ -236,20 +236,20 @@ export default function ProveedoresPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-10 text-gray-400 text-sm">
+        <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">
           {search ? 'Sin resultados.' : 'No hay proveedores registrados.'}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           {filtered.map((p) => (
-            <div key={p.id} className={`bg-white rounded-xl border p-4 shadow-sm ${p.activo ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
+            <div key={p.id} className={`nm-card p-4 ${p.activo ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
               <div className="flex justify-between items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-medium text-gray-900 truncate">{p.nombre}</p>
+                    <p className="font-medium text-[var(--nm-text)] truncate">{p.nombre}</p>
                     {!p.activo && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">Inactivo</span>}
                   </div>
-                  <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
+                  <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-[var(--nm-text-subtle)]">
                     {p.rfc && <span>{p.rfc}</span>}
                     {p.telefono && <span>{p.telefono}</span>}
                   </div>

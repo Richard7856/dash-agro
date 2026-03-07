@@ -121,12 +121,12 @@ export default function PersonasPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
         <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
+          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h1 className="text-xl font-bold text-gray-900">{editId ? 'Editar persona' : 'Nueva persona'}</h1>
+          <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar persona' : 'Nueva persona'}</h1>
         </div>
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
@@ -172,8 +172,8 @@ export default function PersonasPage() {
             </FormField>
           </div>
 
-          <div className="border-t border-gray-100 pt-4">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Capital humano</p>
+          <div className="border-t border-[var(--nm-bg-inset)] pt-4">
+            <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wide mb-3">Capital humano</p>
             <div className="flex flex-col gap-3">
               <FormField label="Descripción de puesto">
                 <textarea
@@ -220,18 +220,18 @@ export default function PersonasPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
+          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-gray-900">{p.nombre}</h1>
+              <h1 className="text-xl font-bold text-[var(--nm-text)]">{p.nombre}</h1>
               {p.rol && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{p.rol}</span>}
               {!p.activo && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">Inactiva</span>}
             </div>
-            <div className="flex flex-wrap gap-x-3 text-xs text-gray-400 mt-0.5">
+            <div className="flex flex-wrap gap-x-3 text-xs text-[var(--nm-text-subtle)] mt-0.5">
               {p.telefono && <span>{p.telefono}</span>}
               {p.email && <span>{p.email}</span>}
             </div>
@@ -261,7 +261,7 @@ export default function PersonasPage() {
             )}
           </div>
         ) : (
-          <div className="text-center py-10 text-gray-400 text-sm">
+          <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">
             Sin información de capital humano registrada.{' '}
             <button onClick={() => openEdit(p)} className="text-green-600 hover:underline">Editar</button>
           </div>
@@ -275,14 +275,14 @@ export default function PersonasPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Personas</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{personas.filter((p) => p.activo).length} activas</p>
+          <h1 className="text-xl font-bold text-[var(--nm-text)]">Personas</h1>
+          <p className="text-sm text-[var(--nm-text-muted)] mt-0.5">{personas.filter((p) => p.activo).length} activas</p>
         </div>
         <Btn onClick={openNew} className="hidden md:flex">+ Nueva persona</Btn>
       </div>
 
       <div className="relative mb-4">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
         </svg>
         <input
@@ -295,24 +295,24 @@ export default function PersonasPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-10 text-gray-400 text-sm">
+        <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">
           {search ? 'Sin resultados para tu búsqueda.' : 'No hay personas registradas.'}
         </div>
       ) : (
         <div className="flex flex-col gap-2">
           {filtered.map((p) => (
-            <div key={p.id} className={`bg-white rounded-xl border p-4 shadow-sm ${p.activo ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
+            <div key={p.id} className={`nm-card p-4 ${p.activo ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
               <div className="flex justify-between items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-medium text-gray-900">{p.nombre}</p>
+                    <p className="font-medium text-[var(--nm-text)]">{p.nombre}</p>
                     {p.rol && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{p.rol}</span>}
                     {!p.activo && <span className="text-xs bg-red-50 text-red-500 px-2 py-0.5 rounded-full">Inactiva</span>}
                   </div>
                   {p.descripcion_puesto && (
-                    <p className="text-xs text-gray-400 mt-1 line-clamp-1">{p.descripcion_puesto}</p>
+                    <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{p.descripcion_puesto}</p>
                   )}
-                  <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-gray-400">
+                  <div className="flex flex-wrap gap-x-3 mt-0.5 text-xs text-[var(--nm-text-subtle)]">
                     {p.telefono && <span>{p.telefono}</span>}
                     {p.email && <span>{p.email}</span>}
                   </div>

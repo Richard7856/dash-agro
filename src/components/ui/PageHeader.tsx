@@ -1,3 +1,5 @@
+import { Btn } from './Btn'
+
 interface PageHeaderProps {
   title: string
   subtitle?: string
@@ -11,17 +13,19 @@ export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-4">
       <div>
-        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-        {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+        <h1 className="text-xl font-bold text-[var(--nm-text)]">{title}</h1>
+        {subtitle && <p className="text-sm text-[var(--nm-text-muted)] mt-0.5">{subtitle}</p>}
       </div>
       {action && (
-        <button
+        <Btn
+          variant="primary"
+          size="sm"
           onClick={action.onClick}
-          className="hidden md:flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 active:bg-green-800 transition-colors"
+          className="hidden md:inline-flex gap-1.5"
         >
           <span className="text-lg leading-none">+</span>
           {action.label}
-        </button>
+        </Btn>
       )}
     </div>
   )

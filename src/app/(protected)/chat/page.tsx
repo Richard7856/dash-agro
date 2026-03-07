@@ -176,9 +176,9 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-[calc(100dvh-4rem)] md:h-screen max-w-2xl mx-auto">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-100 bg-white shrink-0">
-        <h1 className="text-base font-bold text-gray-900">Asistente Agrodelicias</h1>
-        <p className="text-xs text-gray-400">Consultas y registros por voz o texto</p>
+      <div className="px-4 py-3 border-b border-[var(--nm-bg-inset)] bg-[var(--nm-bg)] shrink-0">
+        <h1 className="text-base font-bold text-[var(--nm-text)]">Asistente Agrodelicias</h1>
+        <p className="text-xs text-[var(--nm-text-subtle)]">Consultas y registros por voz o texto</p>
       </div>
 
       {/* Messages */}
@@ -186,13 +186,13 @@ export default function ChatPage() {
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (
-              <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-sm mr-2 mt-1 shrink-0">🌿</div>
+              <div className="nm-inset w-7 h-7 flex items-center justify-center text-sm mr-2 mt-1 shrink-0">🌿</div>
             )}
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+              className={`max-w-[80%] px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
-                  ? 'bg-green-600 text-white rounded-tr-sm'
-                  : 'bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm'
+                  ? 'nm-card-green text-green-900 rounded-[var(--nm-radius)] rounded-tr-sm'
+                  : 'nm-card-sm text-[var(--nm-text)] rounded-[var(--nm-radius-sm)] rounded-tl-none'
               }`}
             >
               {msg.isVoice && msg.role === 'user' && (
@@ -214,12 +214,12 @@ export default function ChatPage() {
         {(loading || transcribing) && (
           <div className="flex justify-start">
             <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-sm mr-2 mt-1 shrink-0">🌿</div>
-            <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+            <div className="nm-card-sm rounded-[var(--nm-radius-sm)] rounded-tl-none px-4 py-3">
               <div className="flex items-center gap-1.5">
                 {transcribing ? (
                   <>
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                    <span className="text-xs text-gray-500">Transcribiendo audio...</span>
+                    <span className="text-xs text-[var(--nm-text-muted)]">Transcribiendo audio...</span>
                   </>
                 ) : (
                   <>
@@ -236,7 +236,7 @@ export default function ChatPage() {
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-gray-100 bg-white px-3 py-3">
+      <div className="shrink-0 border-t border-[var(--nm-bg-inset)] bg-[var(--nm-bg)] px-3 py-3">
         <div className="flex items-end gap-2">
           {/* Mic button */}
           <button
@@ -248,8 +248,8 @@ export default function ChatPage() {
               recording
                 ? 'bg-red-500 text-white scale-110 shadow-lg'
                 : micBusy
-                ? 'bg-gray-100 text-gray-400'
-                : 'bg-gray-100 text-gray-600 hover:bg-green-50 hover:text-green-700 active:scale-95'
+                ? 'nm-inset text-[var(--nm-text-subtle)]'
+                : 'nm-btn text-[var(--nm-text-muted)] hover:text-[var(--nm-accent)]'
             }`}
             aria-label={recording ? 'Grabando... suelta para enviar' : 'Mantén para grabar'}
           >
@@ -278,7 +278,7 @@ export default function ChatPage() {
               }}
               onKeyDown={handleKeyDown}
               disabled={loading || micBusy}
-              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-300 resize-none overflow-hidden disabled:opacity-50"
+              className="nm-input w-full px-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)] resize-none overflow-hidden disabled:opacity-50"
             />
           </div>
 
@@ -286,7 +286,7 @@ export default function ChatPage() {
           <button
             onClick={() => sendMessage(input)}
             disabled={!input.trim() || loading || micBusy}
-            className="shrink-0 w-11 h-11 rounded-full bg-green-600 text-white flex items-center justify-center hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
+            className="shrink-0 w-11 h-11 nm-btn-primary rounded-full text-white flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
             aria-label="Enviar"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
