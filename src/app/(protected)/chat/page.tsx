@@ -42,6 +42,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
+  const [hint, setHint] = useState('')
 
   const bottomRef = useRef<HTMLDivElement>(null)
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -184,8 +185,8 @@ export default function ChatPage() {
 
     // Ignore accidental taps shorter than 600ms
     if (duration < 600) {
-      setInput('Mantén el botón presionado mientras hablas 🎤')
-      setTimeout(() => setInput((v) => v === 'Mantén el botón presionado mientras hablas 🎤' ? '' : v), 2500)
+      setHint('Mantén presionado mientras hablas')
+      setTimeout(() => setHint(''), 2500)
       return
     }
 
@@ -193,8 +194,8 @@ export default function ChatPage() {
 
     if (pcmChunksRef.current.length === 0) {
       setTranscribing(false)
-      setInput('No se capturó audio. Intenta de nuevo 🎤')
-      setTimeout(() => setInput((v) => v === 'No se capturó audio. Intenta de nuevo 🎤' ? '' : v), 2500)
+      setHint('No se capturó audio. Intenta de nuevo')
+      setTimeout(() => setHint(''), 2500)
       return
     }
 
@@ -309,7 +310,15 @@ export default function ChatPage() {
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-[var(--nm-bg-inset)] bg-[var(--nm-bg)] px-3 py-3">
+      <div className="shrink-0 border-t border-[var(--nm-bg-inset)] bg-[var(--nm-bg)] px-3 pt-2 pb-3">
+        {/* Status hint — fixed height, never shifts the button row */}
+        <div className="h-5 flex items-center justify-center mb-1">
+          {recording ? (
+            <span className="text-xs text-red-500 animate-pulse">🔴 Grabando… suelta para enviar</span>
+          ) : hint ? (
+            <span className="text-xs text-[var(--nm-text-subtle)]">{hint}</span>
+          ) : null}
+        </div>
         <div className="flex items-end gap-2">
           {/* Mic button */}
           <button
@@ -370,9 +379,6 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {recording && (
-          <p className="text-center text-xs text-red-500 mt-2 animate-pulse">🔴 Grabando... suelta el botón para transcribir y enviar</p>
-        )}
       </div>
     </div>
   )
