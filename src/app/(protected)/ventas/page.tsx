@@ -7,7 +7,7 @@ import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import type { Venta, Persona, Ubicacion, FormaPago } from '@/lib/types/database.types'
+import type { Venta, Persona, Cliente, Ubicacion, FormaPago } from '@/lib/types/database.types'
 
 const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
   { value: 'efectivo', label: 'Efectivo' },
@@ -21,7 +21,7 @@ const emptyForm = () => ({
   fecha: todayISO(),
   fecha_entrega: '',
   ubicacion_id: '',
-  persona_id: '',
+  cliente_id: '',
   vendedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
   monto_total: '',
@@ -32,6 +32,7 @@ const emptyForm = () => ({
 export default function VentasPage() {
   const [ventas, setVentas] = useState<Venta[]>([])
   const [personas, setPersonas] = useState<Persona[]>([])
+  const [clientes, setClientes] = useState<Cliente[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'list' | 'form'>('list')
@@ -48,17 +49,19 @@ export default function VentasPage() {
   const [showFiltros, setShowFiltros] = useState(false)
 
   const loadData = useCallback(async () => {
-    const [{ data: ventasData }, { data: personasData }, { data: ubicData }] = await Promise.all([
+    const [{ data: ventasData }, { data: personasData }, { data: clientesData }, { data: ubicData }] = await Promise.all([
       supabase
         .from('ventas')
-        .select('*, personas(nombre), ubicaciones(nombre)')
+        .select('*, clientes(nombre), personas(nombre), ubicaciones(nombre)')
         .order('fecha', { ascending: false })
         .limit(100),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+      supabase.from('clientes').select('id, nombre').eq('activo', true).order('nombre'),
       supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
     ])
     setVentas((ventasData ?? []) as Venta[])
     setPersonas(personasData ?? [])
+    setClientes((clientesData ?? []) as Cliente[])
     setUbicaciones(ubicData ?? [])
     setLoading(false)
   }, [])
@@ -73,6 +76,7 @@ export default function VentasPage() {
       result = result.filter((v) =>
         v.numero_venta?.toLowerCase().includes(q) ||
         v.notas?.toLowerCase().includes(q) ||
+        (v.clientes as { nombre: string } | null)?.nombre?.toLowerCase().includes(q) ||
         (v.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
       )
     }
@@ -107,7 +111,7 @@ export default function VentasPage() {
       fecha: v.fecha,
       fecha_entrega: v.fecha_entrega ?? '',
       ubicacion_id: v.ubicacion_id ?? '',
-      persona_id: v.persona_id ?? '',
+      cliente_id: v.cliente_id ?? '',
       vendedor_id: v.vendedor_id ?? '',
       forma_pago: v.forma_pago,
       monto_total: String(v.monto_total),
@@ -135,7 +139,7 @@ export default function VentasPage() {
       fecha: form.fecha,
       fecha_entrega: form.fecha_entrega || null,
       ubicacion_id: form.ubicacion_id || null,
-      persona_id: form.persona_id || null,
+      cliente_id: form.cliente_id || null,
       vendedor_id: form.vendedor_id || null,
       forma_pago: form.forma_pago,
       monto_total: parseFloat(form.monto_total),
@@ -223,10 +227,10 @@ export default function VentasPage() {
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </Select>
             </FormField>
-            <FormField label="Cliente (persona)">
-              <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
+            <FormField label="Cliente">
+              <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
                 <option value="">— Ninguno —</option>
-                {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </Select>
             </FormField>
           </div>
@@ -342,8 +346,8 @@ export default function VentasPage() {
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
                       <span>{formatDate(v.fecha)}</span>
                       {v.fecha_entrega && <span>Entrega: {formatDate(v.fecha_entrega)}</span>}
-                      {(v.personas as { nombre: string } | null)?.nombre && (
-                        <span>{(v.personas as { nombre: string }).nombre}</span>
+                      {((v.clientes as { nombre: string } | null)?.nombre ?? (v.personas as { nombre: string } | null)?.nombre) && (
+                        <span>{(v.clientes as { nombre: string } | null)?.nombre ?? (v.personas as { nombre: string } | null)?.nombre}</span>
                       )}
                       <span className="capitalize">{v.forma_pago.replace('_', ' ')}</span>
                       {(v.ubicaciones as { nombre: string } | null)?.nombre && (

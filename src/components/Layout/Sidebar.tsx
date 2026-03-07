@@ -12,7 +12,8 @@ const items = [
   { href: '/gastos', label: 'Gastos' },
   { href: '/bonos', label: 'Bonos gasolina' },
   { href: '/personas', label: 'Personas' },
-  { href: '/socios', label: 'Socios SAE' },
+  { href: '/clientes', label: 'Clientes' },
+  { href: '/proveedores', label: 'Proveedores' },
   { href: '/api-docs', label: 'API Docs' },
   { href: '/configuracion', label: 'Configuración' },
 ]

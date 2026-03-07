@@ -7,7 +7,7 @@ import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import type { Compra, Persona, Ubicacion, FormaPago } from '@/lib/types/database.types'
+import type { Compra, Persona, Proveedor, Ubicacion, FormaPago } from '@/lib/types/database.types'
 
 const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
   { value: 'efectivo', label: 'Efectivo' },
@@ -21,7 +21,7 @@ const emptyForm = () => ({
   fecha: todayISO(),
   descripcion: '',
   ubicacion_id: '',
-  persona_id: '',
+  proveedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
   monto_total: '',
   gastos: '',
@@ -31,6 +31,7 @@ const emptyForm = () => ({
 export default function ComprasPage() {
   const [compras, setCompras] = useState<Compra[]>([])
   const [personas, setPersonas] = useState<Persona[]>([])
+  const [proveedores, setProveedores] = useState<Proveedor[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'list' | 'form'>('list')
@@ -47,17 +48,19 @@ export default function ComprasPage() {
   const [showFiltros, setShowFiltros] = useState(false)
 
   const loadData = useCallback(async () => {
-    const [{ data: comprasData }, { data: personasData }, { data: ubicData }] = await Promise.all([
+    const [{ data: comprasData }, { data: personasData }, { data: proveedoresData }, { data: ubicData }] = await Promise.all([
       supabase
         .from('compras')
-        .select('*, personas(nombre), ubicaciones(nombre)')
+        .select('*, proveedores(nombre), personas(nombre), ubicaciones(nombre)')
         .order('fecha', { ascending: false })
         .limit(100),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
+      supabase.from('proveedores').select('id, nombre').eq('activo', true).order('nombre'),
       supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
     ])
     setCompras((comprasData ?? []) as Compra[])
     setPersonas(personasData ?? [])
+    setProveedores((proveedoresData ?? []) as Proveedor[])
     setUbicaciones(ubicData ?? [])
     setLoading(false)
   }, [])
@@ -73,6 +76,7 @@ export default function ComprasPage() {
         c.numero_compra?.toLowerCase().includes(q) ||
         c.descripcion?.toLowerCase().includes(q) ||
         c.notas?.toLowerCase().includes(q) ||
+        (c.proveedores as { nombre: string } | null)?.nombre?.toLowerCase().includes(q) ||
         (c.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
       )
     }
@@ -105,7 +109,7 @@ export default function ComprasPage() {
       fecha: c.fecha,
       descripcion: c.descripcion ?? '',
       ubicacion_id: c.ubicacion_id ?? '',
-      persona_id: c.persona_id ?? '',
+      proveedor_id: c.proveedor_id ?? '',
       forma_pago: c.forma_pago,
       monto_total: String(c.monto_total),
       gastos: c.gastos != null ? String(c.gastos) : '',
@@ -132,7 +136,7 @@ export default function ComprasPage() {
       fecha: form.fecha,
       descripcion: form.descripcion || null,
       ubicacion_id: form.ubicacion_id || null,
-      persona_id: form.persona_id || null,
+      proveedor_id: form.proveedor_id || null,
       forma_pago: form.forma_pago,
       monto_total: parseFloat(form.monto_total),
       gastos: form.gastos ? parseFloat(form.gastos) : 0,
@@ -225,10 +229,10 @@ export default function ComprasPage() {
             </FormField>
           </div>
 
-          <FormField label="Persona">
-            <Select value={form.persona_id} onChange={(e) => setForm((f) => ({ ...f, persona_id: e.target.value }))}>
-              <option value="">— Ninguna —</option>
-              {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          <FormField label="Proveedor">
+            <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
+              <option value="">— Ninguno —</option>
+              {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </Select>
           </FormField>
 
@@ -335,8 +339,8 @@ export default function ComprasPage() {
                     {c.descripcion && <p className="text-sm text-gray-700 mt-0.5">{c.descripcion}</p>}
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-gray-500">
                       <span>{formatDate(c.fecha)}</span>
-                      {(c.personas as { nombre: string } | null)?.nombre && (
-                        <span>{(c.personas as { nombre: string }).nombre}</span>
+                      {((c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre) && (
+                        <span>{(c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre}</span>
                       )}
                       <span className="capitalize">{c.forma_pago.replace('_', ' ')}</span>
                       {(c.ubicaciones as { nombre: string } | null)?.nombre && (

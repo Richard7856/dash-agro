@@ -25,12 +25,41 @@ interface UbicacionRow {
   created_at: string
 }
 
+interface ClienteRow {
+  id: string
+  nombre: string
+  rfc: string | null
+  regimen_fiscal: string | null
+  codigo_postal: string | null
+  email: string | null
+  telefono: string | null
+  notas: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface ProveedorRow {
+  id: string
+  nombre: string
+  rfc: string | null
+  regimen_fiscal: string | null
+  codigo_postal: string | null
+  email: string | null
+  telefono: string | null
+  notas: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
 interface CompraRow {
   id: string
   numero_compra: string | null
   fecha: string
   ubicacion_id: string | null
   persona_id: string | null
+  proveedor_id: string | null
   forma_pago: FormaPago
   monto_total: number
   descripcion: string | null
@@ -46,6 +75,7 @@ interface VentaRow {
   fecha: string
   ubicacion_id: string | null
   persona_id: string | null
+  cliente_id: string | null
   vendedor_id: string | null
   forma_pago: FormaPago
   monto_total: number
@@ -123,13 +153,17 @@ interface InventarioRegistroRow {
 
 export type Persona = PersonaRow
 export type Ubicacion = UbicacionRow
+export type Cliente = ClienteRow
+export type Proveedor = ProveedorRow
 
 export interface Compra extends CompraRow {
+  proveedores?: { nombre: string } | null
   personas?: { nombre: string } | null
   ubicaciones?: { nombre: string } | null
 }
 
 export interface Venta extends VentaRow {
+  clientes?: { nombre: string } | null
   personas?: { nombre: string } | null
   ubicaciones?: { nombre: string } | null
 }
@@ -157,6 +191,16 @@ export interface Database {
         Row: UbicacionRow
         Insert: Omit<UbicacionRow, 'id' | 'created_at'>
         Update: Partial<Omit<UbicacionRow, 'id' | 'created_at'>>
+      }
+      clientes: {
+        Row: ClienteRow
+        Insert: Omit<ClienteRow, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<ClienteRow, 'id' | 'created_at' | 'updated_at'>>
+      }
+      proveedores: {
+        Row: ProveedorRow
+        Insert: Omit<ProveedorRow, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<ProveedorRow, 'id' | 'created_at' | 'updated_at'>>
       }
       compras: {
         Row: CompraRow

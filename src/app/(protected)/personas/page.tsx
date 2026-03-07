@@ -2,12 +2,11 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { formatDate, formatMxn } from '@/lib/format'
 import { FormField, Input } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import type { Persona } from '@/lib/types/database.types'
 
-const ROLES = ['', 'Vendedor', 'Comprador', 'Administrativo', 'Bodeguero', 'Chofer', 'Cliente', 'Proveedor', 'Otro']
+const ROLES = ['', 'Vendedor', 'Comprador', 'Administrativo', 'Bodeguero', 'Chofer', 'Otro']
 
 const emptyForm = () => ({
   nombre: '',
@@ -19,22 +18,6 @@ const emptyForm = () => ({
   estructura: '',
 })
 
-interface Movimiento {
-  tipo: 'venta' | 'compra'
-  fecha: string
-  numero: string | null
-  monto: number
-  descripcion: string | null
-}
-
-interface InventarioItem {
-  id: string
-  nombre_producto: string
-  cantidad: number
-  unidad_medida: string
-  precio_compra_unitario: number
-}
-
 export default function PersonasPage() {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,12 +28,6 @@ export default function PersonasPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-
-  // Detail view state
-  const [detailTab, setDetailTab] = useState<'historial' | 'sugerencias'>('historial')
-  const [movimientos, setMovimientos] = useState<Movimiento[]>([])
-  const [inventario, setInventario] = useState<InventarioItem[]>([])
-  const [loadingDetail, setLoadingDetail] = useState(false)
 
   const loadData = useCallback(async () => {
     const { data } = await supabase.from('personas').select('*').order('nombre')
@@ -87,50 +64,9 @@ export default function PersonasPage() {
     setView('form')
   }
 
-  async function openDetail(p: Persona) {
+  function openDetail(p: Persona) {
     setSelectedId(p.id)
-    setDetailTab('historial')
     setView('detail')
-    setLoadingDetail(true)
-
-    const [{ data: ventas }, { data: compras }, { data: inv }] = await Promise.all([
-      supabase
-        .from('ventas')
-        .select('fecha, numero_venta, monto_total, notas')
-        .eq('persona_id', p.id)
-        .order('fecha', { ascending: false }),
-      supabase
-        .from('compras')
-        .select('fecha, numero_compra, monto_total, descripcion')
-        .eq('persona_id', p.id)
-        .order('fecha', { ascending: false }),
-      supabase
-        .from('inventario_registros')
-        .select('id, nombre_producto, cantidad, unidad_medida, precio_compra_unitario')
-        .gt('cantidad', 0)
-        .order('cantidad', { ascending: false }),
-    ])
-
-    const movs: Movimiento[] = [
-      ...(ventas ?? []).map((v) => ({
-        tipo: 'venta' as const,
-        fecha: v.fecha,
-        numero: v.numero_venta,
-        monto: v.monto_total,
-        descripcion: v.notas,
-      })),
-      ...(compras ?? []).map((c) => ({
-        tipo: 'compra' as const,
-        fecha: c.fecha,
-        numero: c.numero_compra,
-        monto: c.monto_total,
-        descripcion: c.descripcion,
-      })),
-    ].sort((a, b) => b.fecha.localeCompare(a.fecha))
-
-    setMovimientos(movs)
-    setInventario((inv ?? []) as InventarioItem[])
-    setLoadingDetail(false)
   }
 
   async function toggleActivo(p: Persona) {
@@ -283,7 +219,6 @@ export default function PersonasPage() {
     const p = selectedPersona
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
-        {/* Header */}
         <div className="flex items-center gap-3 mb-4">
           <button onClick={() => setView('list')} className="p-1 text-gray-500 hover:text-gray-800">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -304,9 +239,8 @@ export default function PersonasPage() {
           <Btn variant="secondary" size="sm" onClick={() => openEdit(p)}>Editar</Btn>
         </div>
 
-        {/* Capital humano cards */}
-        {(p.descripcion_puesto || p.impacto_operativo || p.estructura) && (
-          <div className="flex flex-col gap-2 mb-4">
+        {(p.descripcion_puesto || p.impacto_operativo || p.estructura) ? (
+          <div className="flex flex-col gap-3">
             {p.descripcion_puesto && (
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
                 <p className="text-xs font-semibold text-blue-600 mb-1">Descripción de puesto</p>
@@ -326,75 +260,10 @@ export default function PersonasPage() {
               </div>
             )}
           </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-4">
-          {(['historial', 'sugerencias'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setDetailTab(tab)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-                detailTab === tab
-                  ? 'border-green-600 text-green-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab === 'historial' ? 'Historial' : 'Sugerencias'}
-            </button>
-          ))}
-        </div>
-
-        {loadingDetail ? (
-          <div className="flex justify-center py-10">
-            <div className="w-7 h-7 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : detailTab === 'historial' ? (
-          movimientos.length === 0 ? (
-            <div className="text-center py-10 text-gray-400 text-sm">Sin movimientos registrados para esta persona.</div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {movimientos.map((m, i) => (
-                <div key={i} className="bg-white border border-gray-200 rounded-xl p-3.5 flex items-start gap-3">
-                  <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full mt-0.5 ${
-                    m.tipo === 'venta' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
-                  }`}>
-                    {m.tipo === 'venta' ? 'Venta' : 'Compra'}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-gray-900">{formatMxn(m.monto)}</span>
-                      <span className="text-xs text-gray-400">{formatDate(m.fecha)}</span>
-                    </div>
-                    {m.numero && <p className="text-xs text-gray-400">#{m.numero}</p>}
-                    {m.descripcion && <p className="text-xs text-gray-500 mt-0.5 truncate">{m.descripcion}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
         ) : (
-          <div>
-            <p className="text-xs text-gray-400 mb-3">Productos con existencia en almacén, ordenados por mayor stock disponible.</p>
-            {inventario.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm">Sin productos en existencia actualmente.</div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {inventario.map((item) => (
-                  <div key={item.id} className="bg-white border border-gray-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{item.nombre_producto}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {item.cantidad} {item.unidad_medida} · {formatMxn(item.precio_compra_unitario)}/u
-                      </p>
-                    </div>
-                    <span className="shrink-0 text-xs font-semibold bg-green-50 text-green-700 px-2 py-1 rounded-lg">
-                      {item.cantidad} en stock
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+          <div className="text-center py-10 text-gray-400 text-sm">
+            Sin información de capital humano registrada.{' '}
+            <button onClick={() => openEdit(p)} className="text-green-600 hover:underline">Editar</button>
           </div>
         )}
       </div>
@@ -412,7 +281,6 @@ export default function PersonasPage() {
         <Btn onClick={openNew} className="hidden md:flex">+ Nueva persona</Btn>
       </div>
 
-      {/* Buscador */}
       <div className="relative mb-4">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
