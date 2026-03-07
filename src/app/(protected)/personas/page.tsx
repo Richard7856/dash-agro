@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { FormField, Input } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
+import { Spinner } from '@/components/ui/Spinner'
+import { FormHeader } from '@/components/ui/FormHeader'
 import type { Persona } from '@/lib/types/database.types'
 
 const ROLES = ['', 'Vendedor', 'Comprador', 'Administrativo', 'Bodeguero', 'Chofer', 'Otro']
@@ -101,33 +103,19 @@ export default function PersonasPage() {
 
     setSaving(false)
     setView('list')
-    setLoading(true)
     loadData()
   }
 
   const selectedPersona = selectedId ? personas.find((p) => p.id === selectedId) : null
 
   // ─── Loading ────────────────────────────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <Spinner fullPage />
 
   // ─── Form view ──────────────────────────────────────────────────────────────
   if (view === 'form') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
-        <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar persona' : 'Nueva persona'}</h1>
-        </div>
+        <FormHeader title={editId ? 'Editar persona' : 'Nueva persona'} onBack={() => setView('list')} />
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}

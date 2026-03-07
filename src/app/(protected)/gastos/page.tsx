@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { formatMxn, formatDate, todayISO } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Spinner } from '@/components/ui/Spinner'
+import { FormHeader } from '@/components/ui/FormHeader'
 import type { Gasto, Persona } from '@/lib/types/database.types'
 
 const CATEGORIAS = ['flete', 'combustible', 'personal', 'arrendamiento', 'otro']
@@ -29,6 +31,7 @@ export default function GastosPage() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [busqueda, setBusqueda] = useState('')
 
   const loadData = useCallback(async () => {
     const [{ data: gastosData }, { data: personasData }] = await Promise.all([
@@ -36,7 +39,7 @@ export default function GastosPage() {
         .from('gastos')
         .select('*, personas(nombre)')
         .order('fecha', { ascending: false })
-        .limit(100),
+        .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
     ])
     setGastos((gastosData ?? []) as Gasto[])
@@ -69,7 +72,8 @@ export default function GastosPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar este gasto?')) return
-    await supabase.from('gastos').delete().eq('id', id)
+    const { error: delErr } = await supabase.from('gastos').delete().eq('id', id)
+    if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
     setGastos((gs) => gs.filter((g) => g.id !== id))
   }
 
@@ -102,7 +106,6 @@ export default function GastosPage() {
 
     setSaving(false)
     setView('list')
-    setLoading(true)
     loadData()
   }
 
@@ -110,25 +113,23 @@ export default function GastosPage() {
     .filter((g) => g.fecha.startsWith(todayISO().slice(0, 7)))
     .reduce((s, g) => s + g.monto, 0)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-red-500 border-t-transparent rounded-full animate-spin" />
-      </div>
+  const gastosFiltrados = useMemo(() => {
+    if (!busqueda.trim()) return gastos
+    const q = busqueda.toLowerCase()
+    return gastos.filter((g) =>
+      g.concepto.toLowerCase().includes(q) ||
+      (g.categoria ?? '').toLowerCase().includes(q) ||
+      (g.notas ?? '').toLowerCase().includes(q) ||
+      (g.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
     )
-  }
+  }, [gastos, busqueda])
+
+  if (loading) return <Spinner color="red" fullPage />
 
   if (view === 'form') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
-        <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar gasto' : 'Nuevo gasto'}</h1>
-        </div>
+        <FormHeader title={editId ? 'Editar gasto' : 'Nuevo gasto'} onBack={() => setView('list')} />
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
@@ -190,9 +191,24 @@ export default function GastosPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Gastos"
-        subtitle={`${gastos.length} registros`}
+        subtitle={busqueda ? `${gastosFiltrados.length} de ${gastos.length}` : `${gastos.length} registros`}
         action={{ label: 'Nuevo gasto', onClick: openNew }}
       />
+      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+
+      {/* Búsqueda */}
+      <div className="relative mb-4">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Buscar concepto, categoría, persona..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
+        />
+      </div>
 
       {/* Resumen del mes */}
       {gastos.length > 0 && (
@@ -202,11 +218,13 @@ export default function GastosPage() {
         </div>
       )}
 
-      {gastos.length === 0 ? (
-        <EmptyState message="No hay gastos registrados" action={{ label: 'Registrar primero', onClick: openNew }} />
+      {gastosFiltrados.length === 0 ? (
+        busqueda
+          ? <p className="text-sm text-[var(--nm-text-subtle)] py-8 text-center">Sin resultados para esta búsqueda</p>
+          : <EmptyState message="No hay gastos registrados" action={{ label: 'Registrar primero', onClick: openNew }} />
       ) : (
         <div className="flex flex-col gap-2">
-          {gastos.map((g) => (
+          {gastosFiltrados.map((g) => (
             <div key={g.id} className="nm-card overflow-hidden">
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">

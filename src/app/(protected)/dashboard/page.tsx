@@ -3,14 +3,19 @@
 import { useEffect, useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
-import { formatMxn, formatDate, monthRange, generateNumeroCompra, generateNumeroVenta } from '@/lib/format'
+import { formatMxn, formatDate, monthRange, generateNumeroCompra, generateNumeroVenta, formatFormaPago } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
+import { FORMAS_PAGO } from '@/lib/constants'
 import type { Compra, Venta, Ubicacion, FormaPago } from '@/lib/types/database.types'
 
 // Charts loaded client-only (Recharts doesn't support SSR)
 const WeeklyChart = dynamic(() => import('@/components/dashboard/WeeklyChart'), { ssr: false })
 const PaymentPieChart = dynamic(() => import('@/components/dashboard/PaymentPieChart'), { ssr: false })
+
+// Local minimal interfaces (dashboard only selects id + nombre for dropdowns)
+interface ClienteDropdown { id: string; nombre: string }
+interface ProveedorDropdown { id: string; nombre: string }
 
 interface Stats {
   totalCompras: number
@@ -36,16 +41,6 @@ interface EditTarget {
   type: 'compra' | 'venta'
   id: string
 }
-
-interface Cliente { id: string; nombre: string }
-interface Proveedor { id: string; nombre: string }
-
-const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
-  { value: 'efectivo', label: 'Efectivo' },
-  { value: 'bonos_gasolina', label: 'Bonos gasolina' },
-  { value: 'mixto', label: 'Mixto' },
-  { value: 'otro', label: 'Otro' },
-]
 
 const emptyForm = (type: 'compra' | 'venta' | null = null) => ({
   numero_folio: type === 'compra' ? generateNumeroCompra() : type === 'venta' ? generateNumeroVenta() : '',
@@ -85,8 +80,8 @@ export default function DashboardPage() {
   const [paymentData, setPaymentData] = useState<PaymentEntry[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
   const [ventas, setVentas] = useState<Venta[]>([])
-  const [clientes, setClientes] = useState<Cliente[]>([])
-  const [proveedores, setProveedores] = useState<Proveedor[]>([])
+  const [clientes, setClientes] = useState<ClienteDropdown[]>([])
+  const [proveedores, setProveedores] = useState<ProveedorDropdown[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -181,7 +176,7 @@ export default function DashboardPage() {
     // Build payment pie data from monthly ventas
     const payMap: Record<string, number> = {}
     for (const v of (ventasData ?? [])) {
-      const fp = v.forma_pago?.replace('_', ' ') ?? 'otro'
+      const fp = v.forma_pago ? formatFormaPago(v.forma_pago) : 'Otro'
       payMap[fp] = (payMap[fp] ?? 0) + (v.monto_total ?? 0)
     }
     setPaymentData(Object.entries(payMap).map(([name, value]) => ({ name, value })))
@@ -394,7 +389,7 @@ export default function DashboardPage() {
                           <p className="text-sm font-medium text-[var(--nm-text)]">{nombre}</p>
                           {c.numero_compra && <span className="text-xs font-mono text-[var(--nm-text-subtle)]">{c.numero_compra}</span>}
                         </div>
-                        <p className="text-xs text-[var(--nm-text-subtle)]">{formatDate(c.fecha)} · {c.forma_pago.replace('_', ' ')}</p>
+                        <p className="text-xs text-[var(--nm-text-subtle)]">{formatDate(c.fecha)} · {formatFormaPago(c.forma_pago)}</p>
                         {c.descripcion && <p className="text-xs text-[var(--nm-text-muted)] mt-0.5 truncate">{c.descripcion}</p>}
                       </div>
                       <span className="text-sm font-semibold text-[var(--nm-text)] shrink-0">{formatMxn(c.monto_total)}</span>
@@ -437,7 +432,7 @@ export default function DashboardPage() {
                           <p className="text-sm font-medium text-[var(--nm-text)]">{nombre}</p>
                           {v.numero_venta && <span className="text-xs font-mono text-[var(--nm-text-subtle)]">{v.numero_venta}</span>}
                         </div>
-                        <p className="text-xs text-[var(--nm-text-subtle)]">{formatDate(v.fecha)} · {v.forma_pago.replace('_', ' ')}</p>
+                        <p className="text-xs text-[var(--nm-text-subtle)]">{formatDate(v.fecha)} · {formatFormaPago(v.forma_pago)}</p>
                         {v.notas && <p className="text-xs text-[var(--nm-text-muted)] mt-0.5 truncate italic">{v.notas}</p>}
                       </div>
                       <span className="text-sm font-semibold text-[var(--nm-accent)] shrink-0">{formatMxn(v.monto_total)}</span>

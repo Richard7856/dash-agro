@@ -7,6 +7,8 @@ import { FormField, Input, Textarea, Select } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Spinner } from '@/components/ui/Spinner'
+import { FormHeader } from '@/components/ui/FormHeader'
 import type { ConversionBonos, Persona } from '@/lib/types/database.types'
 
 const emptyForm = () => ({
@@ -33,7 +35,7 @@ export default function BonosPage() {
         .from('conversiones_bonos')
         .select('*, personas(nombre)')
         .order('fecha', { ascending: false })
-        .limit(100),
+        .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
     ])
     setBonos((bonosData ?? []) as ConversionBonos[])
@@ -65,7 +67,8 @@ export default function BonosPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta conversión?')) return
-    await supabase.from('conversiones_bonos').delete().eq('id', id)
+    const { error: delErr } = await supabase.from('conversiones_bonos').delete().eq('id', id)
+    if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
     setBonos((bs) => bs.filter((b) => b.id !== id))
   }
 
@@ -97,7 +100,6 @@ export default function BonosPage() {
 
     setSaving(false)
     setView('list')
-    setLoading(true)
     loadData()
   }
 
@@ -105,25 +107,12 @@ export default function BonosPage() {
     .filter((b) => b.fecha.startsWith(todayISO().slice(0, 7)))
     .reduce((s, b) => s + b.monto_bonos, 0)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <Spinner color="yellow" fullPage />
 
   if (view === 'form') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
-        <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar conversión' : 'Nueva conversión'}</h1>
-        </div>
+        <FormHeader title={editId ? 'Editar conversión' : 'Nueva conversión'} onBack={() => setView('list')} />
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
@@ -178,6 +167,7 @@ export default function BonosPage() {
         subtitle={`${bonos.length} conversiones`}
         action={{ label: 'Nueva conversión', onClick: openNew }}
       />
+      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
 
       {bonos.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-100 rounded-xl p-3 mb-4 flex items-center justify-between">

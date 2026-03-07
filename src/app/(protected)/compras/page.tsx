@@ -2,19 +2,15 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { formatMxn, formatDate, todayISO, generateNumeroCompra } from '@/lib/format'
+import { formatMxn, formatDate, todayISO, generateNumeroCompra, formatFormaPago } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Spinner } from '@/components/ui/Spinner'
+import { FormHeader } from '@/components/ui/FormHeader'
+import { FORMAS_PAGO } from '@/lib/constants'
 import type { Compra, Persona, Proveedor, Ubicacion, FormaPago } from '@/lib/types/database.types'
-
-const FORMAS_PAGO: { value: FormaPago; label: string }[] = [
-  { value: 'efectivo', label: 'Efectivo' },
-  { value: 'bonos_gasolina', label: 'Bonos gasolina' },
-  { value: 'mixto', label: 'Mixto' },
-  { value: 'otro', label: 'Otro' },
-]
 
 const emptyForm = () => ({
   numero_compra: generateNumeroCompra(),
@@ -53,7 +49,7 @@ export default function ComprasPage() {
         .from('compras')
         .select('*, proveedores(nombre), personas(nombre), ubicaciones(nombre)')
         .order('fecha', { ascending: false })
-        .limit(100),
+        .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
       supabase.from('proveedores').select('id, nombre').eq('activo', true).order('nombre'),
       supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
@@ -121,7 +117,8 @@ export default function ComprasPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta compra?')) return
-    await supabase.from('compras').delete().eq('id', id)
+    const { error: delErr } = await supabase.from('compras').delete().eq('id', id)
+    if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
     setCompras((cs) => cs.filter((c) => c.id !== id))
   }
 
@@ -154,30 +151,16 @@ export default function ComprasPage() {
 
     setSaving(false)
     setView('list')
-    setLoading(true)
     loadData()
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <Spinner fullPage />
 
   // ─── FORM ─────────────────────────────────────────────────────────────────────
   if (view === 'form') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5">
-        <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar compra' : 'Nueva compra'}</h1>
-        </div>
+        <FormHeader title={editId ? 'Editar compra' : 'Nueva compra'} onBack={() => setView('list')} />
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
@@ -342,7 +325,7 @@ export default function ComprasPage() {
                       {((c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre) && (
                         <span>{(c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre}</span>
                       )}
-                      <span className="capitalize">{c.forma_pago.replace('_', ' ')}</span>
+                      <span>{formatFormaPago(c.forma_pago)}</span>
                       {(c.ubicaciones as { nombre: string } | null)?.nombre && (
                         <span>{(c.ubicaciones as { nombre: string }).nombre}</span>
                       )}

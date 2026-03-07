@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase/client'
 import { formatDate, formatMxn } from '@/lib/format'
 import { FormField, Input } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
+import { Spinner } from '@/components/ui/Spinner'
+import { FormHeader } from '@/components/ui/FormHeader'
 import type { Cliente } from '@/lib/types/database.types'
 
 const emptyForm = () => ({
@@ -112,28 +114,17 @@ export default function ClientesPage() {
       ({ error: err } = await supabase.from('clientes').insert({ ...payload, activo: true }))
     }
     if (err) { setError('Error al guardar.'); setSaving(false); return }
-    setSaving(false); setView('list'); setLoading(true); loadData()
+    setSaving(false); setView('list'); loadData()
   }
 
   const selected = selectedId ? clientes.find((c) => c.id === selectedId) : null
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
-    </div>
-  )
+  if (loading) return <Spinner fullPage />
 
   // ─── Form ────────────────────────────────────────────────────────────────
   if (view === 'form') return (
     <div className="max-w-2xl mx-auto px-4 py-5">
-      <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-[var(--nm-text)]">{editId ? 'Editar cliente' : 'Nuevo cliente'}</h1>
-      </div>
+      <FormHeader title={editId ? 'Editar cliente' : 'Nuevo cliente'} onBack={() => setView('list')} />
       <form onSubmit={handleSave} className="flex flex-col gap-4">
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
         <FormField label="Nombre / Razón Social" required>
@@ -217,9 +208,7 @@ export default function ClientesPage() {
         </div>
 
         {loadingDetail ? (
-          <div className="flex justify-center py-10">
-            <div className="w-7 h-7 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
-          </div>
+          <Spinner size="sm" />
         ) : detailTab === 'historial' ? (
           ventas.length === 0 ? (
             <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">Sin ventas registradas para este cliente.</div>

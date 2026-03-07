@@ -8,6 +8,8 @@ import { FormField, Input, Select } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Spinner } from '@/components/ui/Spinner'
+import { FormHeader } from '@/components/ui/FormHeader'
 import type { InventarioRegistro, Ubicacion, UnidadMedida } from '@/lib/types/database.types'
 
 const EanScanner = dynamic(() => import('@/components/inventario/EanScanner').then((m) => m.EanScanner), { ssr: false })
@@ -131,7 +133,8 @@ export default function InventarioPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar este registro?')) return
-    await supabase.from('inventario_registros').delete().eq('id', id)
+    const { error: delErr } = await supabase.from('inventario_registros').delete().eq('id', id)
+    if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
     // Si era el único de la página y hay más páginas, retroceder
     if (registros.length === 1 && page > 1) {
       setPage((p) => p - 1)
@@ -224,13 +227,7 @@ export default function InventarioPage() {
   const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
   const hasta = Math.min(page * pageSize, totalCount)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  if (loading) return <Spinner fullPage />
 
   // ─── FORM VIEW ───────────────────────────────────────────────────────────────
   if (view === 'form') {
@@ -243,16 +240,7 @@ export default function InventarioPage() {
           />
         )}
 
-        <div className="flex items-center gap-3 mb-5">
-          <button onClick={() => setView('list')} className="p-1 text-[var(--nm-text-muted)] hover:text-gray-800">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h1 className="text-xl font-bold text-[var(--nm-text)]">
-            {editId ? 'Editar registro' : 'Nuevo registro'}
-          </h1>
-        </div>
+        <FormHeader title={editId ? 'Editar registro' : 'Nuevo registro'} onBack={() => setView('list')} />
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
