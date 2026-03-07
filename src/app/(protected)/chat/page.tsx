@@ -117,8 +117,13 @@ export default function ChatPage() {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
-      const recorder = new MediaRecorder(stream, { mimeType })
+      // Prefer webm/opus (best Groq compatibility), fallback to mp4 on iOS/Safari
+      const mimeType =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
+        ''
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       chunksRef.current = []
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.start()
@@ -156,18 +161,25 @@ export default function ChatPage() {
         body: form,
       })
       const data = await res.json()
+      if (!res.ok) {
+        const msg = res.status === 503
+          ? 'Transcripción no configurada en el servidor. Contacta al administrador.'
+          : `Error del servidor (${data.groqStatus ?? res.status}). Intenta de nuevo.`
+        console.error('[chat] transcribe error:', data)
+        setTranscribing(false)
+        alert(msg)
+        return
+      }
       if (data.text?.trim()) {
-        setInput(data.text.trim())
-        // Auto-send after transcription
         setTranscribing(false)
         await sendMessage(data.text.trim(), true)
       } else {
         setTranscribing(false)
-        alert('No se pudo transcribir el audio. Intenta de nuevo.')
+        alert('Audio recibido pero sin texto. Habla más cerca del micrófono.')
       }
     } catch {
       setTranscribing(false)
-      alert('Error al transcribir el audio.')
+      alert('Error de red al transcribir el audio.')
     }
   }
 

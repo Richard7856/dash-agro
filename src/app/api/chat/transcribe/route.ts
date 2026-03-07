@@ -10,16 +10,29 @@ export async function POST(req: NextRequest) {
   // Verify Supabase session via Bearer token
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
   if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-  const { error } = await supabaseAdmin.auth.getUser(token)
-  if (error) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const { error: authError } = await supabaseAdmin.auth.getUser(token)
+  if (authError) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  // Check GROQ_API_KEY is configured
+  if (!process.env.GROQ_API_KEY) {
+    console.error('[transcribe] GROQ_API_KEY not set in environment')
+    return NextResponse.json(
+      { error: 'Servicio de transcripción no configurado (falta GROQ_API_KEY)' },
+      { status: 503 }
+    )
+  }
 
   const formData = await req.formData()
   const audio = formData.get('audio') as File | null
   if (!audio) return NextResponse.json({ error: 'Audio requerido' }, { status: 400 })
 
-  // Forward to Groq Whisper
+  console.log('[transcribe] audio size:', audio.size, 'type:', audio.type, 'name:', audio.name)
+
+  // Build Groq request — ensure proper filename extension
+  const ext = audio.name?.includes('.') ? audio.name.split('.').pop() :
+    audio.type.includes('mp4') ? 'mp4' : 'webm'
   const groqForm = new FormData()
-  groqForm.append('file', audio, audio.name || 'audio.webm')
+  groqForm.append('file', audio, `audio.${ext}`)
   groqForm.append('model', 'whisper-large-v3-turbo')
   groqForm.append('language', 'es')
   groqForm.append('response_format', 'json')
@@ -31,9 +44,12 @@ export async function POST(req: NextRequest) {
   })
 
   if (!groqRes.ok) {
-    const err = await groqRes.text()
-    console.error('Groq error:', err)
-    return NextResponse.json({ error: 'Error al transcribir el audio' }, { status: 502 })
+    const errText = await groqRes.text()
+    console.error('[transcribe] Groq status:', groqRes.status, 'body:', errText)
+    return NextResponse.json(
+      { error: 'Error al transcribir', groqStatus: groqRes.status },
+      { status: 502 }
+    )
   }
 
   const result = await groqRes.json()
