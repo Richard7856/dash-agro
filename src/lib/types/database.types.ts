@@ -54,6 +54,28 @@ interface VentaRow {
   updated_at: string
 }
 
+interface ApiKeyRow {
+  id: string
+  nombre: string
+  key_hash: string
+  key_prefix: string
+  activo: boolean
+  created_at: string
+  last_used_at: string | null
+}
+
+interface SocioComercialRow {
+  id: string
+  tipo: 'cliente' | 'proveedor'
+  rfc: string | null
+  razon_social: string
+  regimen_fiscal: string | null
+  codigo_postal: string | null
+  activo: boolean
+  created_at: string
+  updated_at: string
+}
+
 interface GastoRow {
   id: string
   fecha: string
@@ -109,6 +131,8 @@ export interface Venta extends VentaRow {
   ubicaciones?: { nombre: string } | null
 }
 
+export type ApiKey = ApiKeyRow
+export type SocioComercial = SocioComercialRow
 export type Gasto = GastoRow & { personas?: { nombre: string } | null }
 export type ConversionBonos = ConversionBonosRow & { personas?: { nombre: string } | null }
 

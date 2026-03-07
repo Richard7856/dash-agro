@@ -4,7 +4,7 @@ import { validateApiKey, unauthorizedResponse } from '@/lib/api-auth'
 import { generateSKU, generateLote } from '@/lib/format'
 
 export async function GET(req: NextRequest) {
-  if (!validateApiKey(req)) return unauthorizedResponse()
+  if (!await validateApiKey(req)) return unauthorizedResponse()
 
   const { searchParams } = new URL(req.url)
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '100'), 500)
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!validateApiKey(req)) return unauthorizedResponse()
+  if (!await validateApiKey(req)) return unauthorizedResponse()
 
   let body: Record<string, unknown>
   try {
