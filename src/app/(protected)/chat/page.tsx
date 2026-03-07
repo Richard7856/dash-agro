@@ -118,16 +118,16 @@ export default function ChatPage() {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Plain MIME without codec qualifiers — Groq only accepts clean types
+      // Use codec spec to create valid webm containers; fall back to mp4 (iOS/Safari)
       const mimeType =
+        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
         MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
         MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
         ''
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       chunksRef.current = []
-      // 100ms timeslice: frequent chunks so we get data even from short recordings
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      recorder.start(100)
+      recorder.start(500)
       recordingStartRef.current = Date.now()
       mediaRecorderRef.current = recorder
       setRecording(true)
@@ -154,17 +154,13 @@ export default function ChatPage() {
 
     setTranscribing(true)
 
-    // Force flush remaining data before stopping (fixes Android race condition)
-    try { recorder.requestData() } catch { /* not all browsers support this */ }
-
+    // Per spec: ondataavailable fires BEFORE onstop — no delay needed
+    // Do NOT call requestData() before stop() — it corrupts the webm container finalization
     await new Promise<void>((resolve) => {
       recorder.onstop = () => resolve()
       recorder.stop()
       recorder.stream.getTracks().forEach((t) => t.stop())
     })
-
-    // Wait 150ms to ensure final ondataavailable callbacks have fired before reading chunks
-    await new Promise((r) => setTimeout(r, 150))
 
     if (chunksRef.current.length === 0) {
       setTranscribing(false)
@@ -173,12 +169,13 @@ export default function ChatPage() {
       return
     }
 
-    // Normalize MIME type for Groq: strip codec info, convert video/webm → audio/webm
-    const rawType = (recorder.mimeType || 'audio/webm').split(';')[0]
-    const cleanType = rawType.startsWith('video/') ? rawType.replace('video/', 'audio/') : rawType
+    // Record with codec qualifier (creates valid container), upload without (Groq rejects codec qualifiers)
+    const rawMime = recorder.mimeType || 'audio/webm'
+    const recordType = rawMime.startsWith('video/') ? rawMime.replace('video/', 'audio/') : rawMime
+    const cleanType = recordType.split(';')[0]  // strip codec qualifier for Groq
     const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
 
-    const blob = new Blob(chunksRef.current, { type: cleanType })
+    const blob = new Blob(chunksRef.current, { type: recordType })
 
     if (blob.size < 1000) {
       setTranscribing(false)
@@ -187,7 +184,7 @@ export default function ChatPage() {
       return
     }
 
-    const file = new File([blob], `audio.${ext}`, { type: cleanType })
+    const file = new File([blob], `audio.${ext}`, { type: cleanType })  // cleanType has no codec qualifier
 
     const form = new FormData()
     form.append('audio', file)
@@ -291,10 +288,12 @@ export default function ChatPage() {
         <div className="flex items-end gap-2">
           {/* Mic button */}
           <button
-            onPointerDown={startRecording}
+            onPointerDown={(e) => { e.preventDefault(); startRecording() }}
             onPointerUp={stopRecording}
             onPointerLeave={recording ? stopRecording : undefined}
+            onContextMenu={(e) => e.preventDefault()}
             disabled={loading || transcribing}
+            style={{ userSelect: 'none', touchAction: 'none' }}
             className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center transition-all ${
               recording
                 ? 'bg-red-500 text-white scale-110 shadow-lg'
