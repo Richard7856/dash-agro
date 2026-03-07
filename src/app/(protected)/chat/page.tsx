@@ -117,16 +117,17 @@ export default function ChatPage() {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Prefer webm/opus (best Groq compatibility), fallback to mp4 on iOS/Safari
+      // Use plain MIME types without codec qualifiers — Groq only accepts clean types
+      // audio/webm works on Chrome/Android; audio/mp4 works on iOS/Safari
       const mimeType =
-        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
         MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
         MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
         ''
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
       chunksRef.current = []
+      // timeslice=250ms ensures ondataavailable fires on Android (without it, may never fire)
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      recorder.start()
+      recorder.start(250)
       mediaRecorderRef.current = recorder
       setRecording(true)
     } catch {
@@ -146,9 +147,26 @@ export default function ChatPage() {
       recorder.stream.getTracks().forEach((t) => t.stop())
     })
 
-    const blob = new Blob(chunksRef.current, { type: recorder.mimeType })
-    const ext = recorder.mimeType.includes('mp4') ? 'mp4' : 'webm'
-    const file = new File([blob], `audio.${ext}`, { type: recorder.mimeType })
+    if (chunksRef.current.length === 0) {
+      setTranscribing(false)
+      alert('No se capturó audio. Intenta de nuevo y mantén el botón presionado mientras hablas.')
+      return
+    }
+
+    // Normalize MIME type for Groq: strip codec info, convert video/webm → audio/webm
+    const rawType = (recorder.mimeType || 'audio/webm').split(';')[0]
+    const cleanType = rawType.startsWith('video/') ? rawType.replace('video/', 'audio/') : rawType
+    const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
+
+    const blob = new Blob(chunksRef.current, { type: cleanType })
+
+    if (blob.size < 500) {
+      setTranscribing(false)
+      alert('Audio muy corto. Mantén el botón presionado mientras hablas.')
+      return
+    }
+
+    const file = new File([blob], `audio.${ext}`, { type: cleanType })
 
     const form = new FormData()
     form.append('audio', file)
