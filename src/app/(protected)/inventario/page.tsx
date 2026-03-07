@@ -53,6 +53,10 @@ export default function InventarioPage() {
   const [scanning, setScanning] = useState(false)
   const [hasCamera, setHasCamera] = useState(false)
 
+  // Aviso EAN duplicado
+  const [eanDuplicates, setEanDuplicates] = useState<InventarioRegistro[]>([])
+  const [showEanWarning, setShowEanWarning] = useState(false)
+
   // Paginación
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<PageSize>(20)
@@ -99,10 +103,14 @@ export default function InventarioPage() {
     setEditId(null)
     setForm(emptyForm())
     setError('')
+    setEanDuplicates([])
+    setShowEanWarning(false)
     setView('form')
   }
 
   function openEdit(r: InventarioRegistro) {
+    setEanDuplicates([])
+    setShowEanWarning(false)
     setEditId(r.id)
     setForm({
       ean: r.ean ?? '',
@@ -132,12 +140,7 @@ export default function InventarioPage() {
     }
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
-    if (!form.nombre_producto || !form.cantidad || !form.precio_compra_unitario) {
-      setError('Nombre, cantidad y precio son requeridos')
-      return
-    }
+  async function performSave() {
     setSaving(true)
     setError('')
 
@@ -171,9 +174,39 @@ export default function InventarioPage() {
 
     setSaving(false)
     setView('list')
-    // Nuevo registro → ir a página 1 para verlo; edición → quedarse en la misma
     if (!editId) setPage(1)
     forceRefresh()
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.nombre_producto || !form.cantidad || !form.precio_compra_unitario) {
+      setError('Nombre, cantidad y precio son requeridos')
+      return
+    }
+
+    // Verificar EAN duplicado solo en registros nuevos con EAN
+    if (!editId && form.ean) {
+      const { data: existing } = await supabase
+        .from('inventario_registros')
+        .select('*, ubicaciones(nombre)')
+        .eq('ean', form.ean)
+        .order('created_at', { ascending: false })
+
+      if (existing && existing.length > 0) {
+        setEanDuplicates(existing as InventarioRegistro[])
+        setShowEanWarning(true)
+        return
+      }
+    }
+
+    await performSave()
+  }
+
+  async function handleConfirmNewLot() {
+    setShowEanWarning(false)
+    setEanDuplicates([])
+    await performSave()
   }
 
   const precioTotal = form.cantidad && form.precio_compra_unitario
@@ -332,10 +365,67 @@ export default function InventarioPage() {
             </Select>
           </FormField>
 
-          <div className="flex gap-2 pt-1">
-            <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
-            <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
-          </div>
+          {/* Aviso EAN duplicado */}
+          {showEanWarning && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+                <div>
+                  <p className="font-semibold text-amber-800 text-sm">EAN ya registrado</p>
+                  <p className="text-xs text-amber-700">Este código existe en {eanDuplicates.length} registro{eanDuplicates.length > 1 ? 's' : ''}</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {eanDuplicates.map((r) => {
+                  const expiry = getExpiryStatus(r.fecha_caducidad ?? null)
+                  return (
+                    <div key={r.id} className="bg-white rounded-lg border border-amber-200 p-3">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm text-[var(--nm-text)] truncate">{r.nombre_producto}</p>
+                          <p className="text-xs text-[var(--nm-text-muted)] mt-0.5">
+                            {r.cantidad} {r.unidad_medida} · {formatMxn(r.precio_compra_total)}
+                          </p>
+                          {r.numero_lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {r.numero_lote}</p>}
+                          {r.fecha_caducidad && (
+                            <p className={`text-xs font-medium ${expiry === 'expired' ? 'text-red-600' : expiry === 'soon' ? 'text-amber-600' : 'text-[var(--nm-text-subtle)]'}`}>
+                              Cad: {formatDate(r.fecha_caducidad)}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openEdit(r)}
+                          className="shrink-0 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200"
+                        >
+                          Editar
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="flex gap-2">
+                <Btn type="button" variant="secondary" onClick={() => setShowEanWarning(false)} className="flex-1">
+                  Cancelar
+                </Btn>
+                <Btn type="button" onClick={handleConfirmNewLot} loading={saving} className="flex-1">
+                  Nuevo lote igualmente
+                </Btn>
+              </div>
+            </div>
+          )}
+
+          {!showEanWarning && (
+            <div className="flex gap-2 pt-1">
+              <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
+              <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
+            </div>
+          )}
         </form>
       </div>
     )
