@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
 
 export async function POST(req: NextRequest) {
-  // Verify Supabase session
-  const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll() } }
-  )
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  // Verify Supabase session via Bearer token
+  const token = req.headers.get('authorization')?.replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const { error } = await supabaseAdmin.auth.getUser(token)
+  if (error) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const formData = await req.formData()
   const audio = formData.get('audio') as File | null

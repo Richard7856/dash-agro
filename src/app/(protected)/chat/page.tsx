@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase/client'
 
 interface Message {
   id: string
@@ -58,6 +59,11 @@ export default function ChatPage() {
       .map((m) => ({ role: m.role, content: m.content }))
   }
 
+  async function getToken(): Promise<string> {
+    const { data } = await supabase.auth.getSession()
+    return data.session?.access_token ?? ''
+  }
+
   async function sendMessage(text: string, isVoice = false) {
     if (!text.trim() || loading) return
 
@@ -74,9 +80,10 @@ export default function ChatPage() {
     setLoading(true)
 
     try {
+      const token = await getToken()
       const res = await fetch('/api/chat/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ messages: toApiMessages(updatedMessages) }),
       })
       const data = await res.json()
@@ -142,7 +149,12 @@ export default function ChatPage() {
     form.append('audio', file)
 
     try {
-      const res = await fetch('/api/chat/transcribe', { method: 'POST', body: form })
+      const token = await getToken()
+      const res = await fetch('/api/chat/transcribe', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      })
       const data = await res.json()
       if (data.text?.trim()) {
         setInput(data.text.trim())

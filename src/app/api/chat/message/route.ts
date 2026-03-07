@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import Anthropic from '@anthropic-ai/sdk'
 import { TOOL_DEFINITIONS, executeTool } from '@/lib/agent/tools'
 import { buildSystemPrompt } from '@/lib/agent/system-prompt'
 
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+)
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 export async function POST(req: NextRequest) {
-  // Verify Supabase session
-  const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => cookieStore.getAll() } }
-  )
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  // Verify Supabase session via Bearer token
+  const token = req.headers.get('authorization')?.replace('Bearer ', '')
+  if (!token) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+  const { error: authError } = await supabaseAdmin.auth.getUser(token)
+  if (authError) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { messages } = await req.json() as { messages: Anthropic.MessageParam[] }
   if (!messages?.length) return NextResponse.json({ error: 'Mensajes requeridos' }, { status: 400 })
