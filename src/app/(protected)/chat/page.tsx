@@ -44,8 +44,10 @@ export default function ChatPage() {
   const [transcribing, setTranscribing] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const pcmChunksRef = useRef<Float32Array[]>([])
+  const sampleRateRef = useRef(16000)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const recordingStartRef = useRef<number>(0)
 
@@ -113,56 +115,53 @@ export default function ChatPage() {
     }
   }
 
-  // ─── WAV encoding (browser-side, ensures Groq compatibility) ─────────────
+  // ─── WAV encoding from raw PCM samples ──────────────────────────────────
 
-  async function encodeToWav(blob: Blob): Promise<Blob> {
-    const arrayBuffer = await blob.arrayBuffer()
-    const audioCtx = new AudioContext()
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer)
-    await audioCtx.close()
-
-    const numChannels = 1 // mono — smaller file, sufficient for voice
-    const sampleRate = decoded.sampleRate
-    const src = decoded.getChannelData(0)
-    const numSamples = src.length
-
-    // Convert float32 → int16 PCM
-    const pcm16 = new Int16Array(numSamples)
-    for (let i = 0; i < numSamples; i++) {
-      pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(src[i] * 32767)))
+  function encodePcmToWav(samples: Float32Array, sampleRate: number): Blob {
+    const pcm16 = new Int16Array(samples.length)
+    for (let i = 0; i < samples.length; i++) {
+      pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(samples[i] * 32767)))
     }
-
-    // Build WAV container
     const wavBuf = new ArrayBuffer(44 + pcm16.byteLength)
     const v = new DataView(wavBuf)
     const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
     w(0, 'RIFF'); v.setUint32(4, 36 + pcm16.byteLength, true); w(8, 'WAVE')
     w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)
-    v.setUint16(22, numChannels, true); v.setUint32(24, sampleRate, true)
-    v.setUint32(28, sampleRate * numChannels * 2, true); v.setUint16(32, numChannels * 2, true)
+    v.setUint16(22, 1, true); v.setUint32(24, sampleRate, true)
+    v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true)
     v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, pcm16.byteLength, true)
     new Int16Array(wavBuf, 44).set(pcm16)
-
     return new Blob([wavBuf], { type: 'audio/wav' })
   }
 
-  // ─── Voice recording ──────────────────────────────────────────────────────
+  // ─── Voice recording (raw PCM via ScriptProcessorNode — no WebM) ───────
 
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Use codec spec to create valid webm containers; fall back to mp4 (iOS/Safari)
-      const mimeType =
-        MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
-        MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
-        MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' :
-        ''
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-      chunksRef.current = []
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-      recorder.start(500)
+      const audioCtx = new AudioContext()
+      const source = audioCtx.createMediaStreamSource(stream)
+      // eslint-disable-next-line deprecation/deprecation
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1)
+
+      pcmChunksRef.current = []
+      sampleRateRef.current = audioCtx.sampleRate
+
+      processor.onaudioprocess = (e) => {
+        const data = e.inputBuffer.getChannelData(0)
+        pcmChunksRef.current.push(new Float32Array(data))
+      }
+
+      // Connect through silent gain to ensure onaudioprocess fires on all browsers
+      const silentGain = audioCtx.createGain()
+      silentGain.gain.value = 0
+      source.connect(processor)
+      processor.connect(silentGain)
+      silentGain.connect(audioCtx.destination)
+
+      audioCtxRef.current = audioCtx
+      streamRef.current = stream
       recordingStartRef.current = Date.now()
-      mediaRecorderRef.current = recorder
       setRecording(true)
     } catch {
       alert('No se pudo acceder al micrófono. Verifica los permisos.')
@@ -170,16 +169,21 @@ export default function ChatPage() {
   }
 
   async function stopRecording() {
-    const recorder = mediaRecorderRef.current
-    if (!recorder || recorder.state === 'inactive') return
+    const audioCtx = audioCtxRef.current
+    const stream = streamRef.current
+    if (!audioCtx || !stream) return
 
     const duration = Date.now() - recordingStartRef.current
     setRecording(false)
 
-    // Ignore accidental taps shorter than 600ms — don't send to Groq
+    // Stop capture
+    stream.getTracks().forEach((t) => t.stop())
+    await audioCtx.close()
+    audioCtxRef.current = null
+    streamRef.current = null
+
+    // Ignore accidental taps shorter than 600ms
     if (duration < 600) {
-      recorder.stream.getTracks().forEach((t) => t.stop())
-      recorder.stop()
       setInput('Mantén el botón presionado mientras hablas 🎤')
       setTimeout(() => setInput((v) => v === 'Mantén el botón presionado mientras hablas 🎤' ? '' : v), 2500)
       return
@@ -187,43 +191,25 @@ export default function ChatPage() {
 
     setTranscribing(true)
 
-    // Per spec: ondataavailable fires BEFORE onstop — no delay needed
-    // Do NOT call requestData() before stop() — it corrupts the webm container finalization
-    await new Promise<void>((resolve) => {
-      recorder.onstop = () => resolve()
-      recorder.stop()
-      recorder.stream.getTracks().forEach((t) => t.stop())
-    })
-
-    if (chunksRef.current.length === 0) {
+    if (pcmChunksRef.current.length === 0) {
       setTranscribing(false)
       setInput('No se capturó audio. Intenta de nuevo 🎤')
       setTimeout(() => setInput((v) => v === 'No se capturó audio. Intenta de nuevo 🎤' ? '' : v), 2500)
       return
     }
 
-    const rawMime = recorder.mimeType || 'audio/webm'
-    const recordType = rawMime.startsWith('video/') ? rawMime.replace('video/', 'audio/') : rawMime
-    const rawBlob = new Blob(chunksRef.current, { type: recordType })
-
-    if (rawBlob.size < 1000) {
-      setTranscribing(false)
-      setInput('Audio muy corto. Mantén el botón presionado 🎤')
-      setTimeout(() => setInput((v) => v === 'Audio muy corto. Mantén el botón presionado 🎤' ? '' : v), 2500)
-      return
+    // Concatenate PCM chunks into a single Float32Array
+    const totalLen = pcmChunksRef.current.reduce((a, c) => a + c.length, 0)
+    const pcm = new Float32Array(totalLen)
+    let offset = 0
+    for (const chunk of pcmChunksRef.current) {
+      pcm.set(chunk, offset)
+      offset += chunk.length
     }
 
-    // Convert to WAV (PCM) — guaranteed compatible with Groq on all platforms
-    let file: File
-    try {
-      const wavBlob = await encodeToWav(rawBlob)
-      file = new File([wavBlob], 'audio.wav', { type: 'audio/wav' })
-    } catch {
-      // Fallback: send original blob without codec qualifier
-      const cleanType = recordType.split(';')[0]
-      const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
-      file = new File([rawBlob], `audio.${ext}`, { type: cleanType })
-    }
+    // Encode as WAV — raw PCM, universally compatible with Groq
+    const wavBlob = encodePcmToWav(pcm, sampleRateRef.current)
+    const file = new File([wavBlob], 'audio.wav', { type: 'audio/wav' })
 
     const form = new FormData()
     form.append('audio', file)
