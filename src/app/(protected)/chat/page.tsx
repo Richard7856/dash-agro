@@ -113,6 +113,39 @@ export default function ChatPage() {
     }
   }
 
+  // ─── WAV encoding (browser-side, ensures Groq compatibility) ─────────────
+
+  async function encodeToWav(blob: Blob): Promise<Blob> {
+    const arrayBuffer = await blob.arrayBuffer()
+    const audioCtx = new AudioContext()
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer)
+    await audioCtx.close()
+
+    const numChannels = 1 // mono — smaller file, sufficient for voice
+    const sampleRate = decoded.sampleRate
+    const src = decoded.getChannelData(0)
+    const numSamples = src.length
+
+    // Convert float32 → int16 PCM
+    const pcm16 = new Int16Array(numSamples)
+    for (let i = 0; i < numSamples; i++) {
+      pcm16[i] = Math.max(-32768, Math.min(32767, Math.round(src[i] * 32767)))
+    }
+
+    // Build WAV container
+    const wavBuf = new ArrayBuffer(44 + pcm16.byteLength)
+    const v = new DataView(wavBuf)
+    const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)) }
+    w(0, 'RIFF'); v.setUint32(4, 36 + pcm16.byteLength, true); w(8, 'WAVE')
+    w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true)
+    v.setUint16(22, numChannels, true); v.setUint32(24, sampleRate, true)
+    v.setUint32(28, sampleRate * numChannels * 2, true); v.setUint16(32, numChannels * 2, true)
+    v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, pcm16.byteLength, true)
+    new Int16Array(wavBuf, 44).set(pcm16)
+
+    return new Blob([wavBuf], { type: 'audio/wav' })
+  }
+
   // ─── Voice recording ──────────────────────────────────────────────────────
 
   async function startRecording() {
@@ -169,22 +202,28 @@ export default function ChatPage() {
       return
     }
 
-    // Record with codec qualifier (creates valid container), upload without (Groq rejects codec qualifiers)
     const rawMime = recorder.mimeType || 'audio/webm'
     const recordType = rawMime.startsWith('video/') ? rawMime.replace('video/', 'audio/') : rawMime
-    const cleanType = recordType.split(';')[0]  // strip codec qualifier for Groq
-    const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
+    const rawBlob = new Blob(chunksRef.current, { type: recordType })
 
-    const blob = new Blob(chunksRef.current, { type: recordType })
-
-    if (blob.size < 1000) {
+    if (rawBlob.size < 1000) {
       setTranscribing(false)
       setInput('Audio muy corto. Mantén el botón presionado 🎤')
       setTimeout(() => setInput((v) => v === 'Audio muy corto. Mantén el botón presionado 🎤' ? '' : v), 2500)
       return
     }
 
-    const file = new File([blob], `audio.${ext}`, { type: cleanType })  // cleanType has no codec qualifier
+    // Convert to WAV (PCM) — guaranteed compatible with Groq on all platforms
+    let file: File
+    try {
+      const wavBlob = await encodeToWav(rawBlob)
+      file = new File([wavBlob], 'audio.wav', { type: 'audio/wav' })
+    } catch {
+      // Fallback: send original blob without codec qualifier
+      const cleanType = recordType.split(';')[0]
+      const ext = cleanType.includes('mp4') ? 'mp4' : 'webm'
+      file = new File([rawBlob], `audio.${ext}`, { type: cleanType })
+    }
 
     const form = new FormData()
     form.append('audio', file)
