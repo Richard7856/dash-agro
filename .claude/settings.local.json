@@ -1,11 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l src/**/*.tsx src/**/*.ts)"
+      "Bash(wc -l src/**/*.tsx src/**/*.ts)",
+      "Bash(npm install recharts)",
+      "Bash(node -e \"require\\(''recharts''\\); console.log\\(''recharts OK''\\)\")",
+      "Bash(npx tsc --noEmit --project tsconfig.json)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
