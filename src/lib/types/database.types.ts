@@ -1,4 +1,7 @@
 export type FormaPago = 'efectivo' | 'bonos_gasolina' | 'mixto' | 'otro'
+export type StatusPago = 'pendiente' | 'parcial' | 'pagado'
+export type FacturaStatus = 'borrador' | 'emitida' | 'pagada' | 'cancelada'
+export type FacturaTipo = 'ingreso' | 'egreso'
 export type UnidadMedida = 'unidad' | 'kg' | 'lt' | 'caja' | 'tarima' | 'pieza' | 'litro' | 'gramo'
 
 // ─── Row types (sin joins — para el generic de Supabase) ────────────────────
@@ -65,6 +68,8 @@ interface CompraRow {
   descripcion: string | null
   gastos: number | null
   notas: string | null
+  status_pago: StatusPago
+  fecha_vencimiento: string | null
   created_at: string
   updated_at: string
 }
@@ -83,6 +88,8 @@ interface VentaRow {
   fecha_entrega: string | null
   gastos_extras: number | null
   notas: string | null
+  status_pago: StatusPago
+  fecha_vencimiento: string | null
   created_at: string
   updated_at: string
 }
@@ -176,6 +183,41 @@ export type ConversionBonos = ConversionBonosRow & { personas?: { nombre: string
 export interface InventarioRegistro extends InventarioRegistroRow {
   ubicaciones?: { nombre: string } | null
 }
+
+interface FacturaRow {
+  id: string
+  numero_factura: string | null
+  fecha: string
+  tipo: FacturaTipo
+  cliente_id: string | null
+  proveedor_id: string | null
+  subtotal: number
+  iva: number
+  total: number
+  status: FacturaStatus
+  venta_id: string | null
+  compra_id: string | null
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface FacturaPartidaRow {
+  id: string
+  factura_id: string
+  descripcion: string
+  cantidad: number
+  precio_unitario: number
+  total: number
+  created_at: string
+}
+
+export interface Factura extends FacturaRow {
+  clientes?: { nombre: string } | null
+  proveedores?: { nombre: string } | null
+  facturas_partidas?: FacturaPartida[]
+}
+export type FacturaPartida = FacturaPartidaRow
 
 // ─── Database type para createClient<Database> ──────────────────────────────
 

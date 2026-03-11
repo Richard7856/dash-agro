@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import { FORMAS_PAGO } from '@/lib/constants'
-import type { Venta, Persona, Cliente, Ubicacion, FormaPago } from '@/lib/types/database.types'
+import type { Venta, Persona, Cliente, Ubicacion, FormaPago, StatusPago } from '@/lib/types/database.types'
 
 const emptyForm = () => ({
   numero_venta: generateNumeroVenta(),
@@ -23,6 +23,8 @@ const emptyForm = () => ({
   monto_total: '',
   gastos_extras: '',
   notas: '',
+  status_pago: 'pagado' as StatusPago,
+  fecha_vencimiento: '',
 })
 
 export default function VentasPage() {
@@ -113,6 +115,8 @@ export default function VentasPage() {
       monto_total: String(v.monto_total),
       gastos_extras: v.gastos_extras != null ? String(v.gastos_extras) : '',
       notas: v.notas ?? '',
+      status_pago: v.status_pago,
+      fecha_vencimiento: v.fecha_vencimiento ?? '',
     })
     setError('')
     setView('form')
@@ -142,6 +146,8 @@ export default function VentasPage() {
       monto_total: parseFloat(form.monto_total),
       gastos_extras: form.gastos_extras ? parseFloat(form.gastos_extras) : 0,
       notas: form.notas || null,
+      status_pago: form.status_pago,
+      fecha_vencimiento: form.fecha_vencimiento || null,
     }
 
     let err
@@ -238,6 +244,19 @@ export default function VentasPage() {
             <Textarea placeholder="Observaciones opcionales..." value={form.notas} onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))} />
           </FormField>
 
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Estado de pago">
+              <Select value={form.status_pago} onChange={(e) => setForm((f) => ({ ...f, status_pago: e.target.value as StatusPago }))}>
+                <option value="pagado">Pagado</option>
+                <option value="parcial">Parcial</option>
+                <option value="pendiente">Pendiente</option>
+              </Select>
+            </FormField>
+            <FormField label="Fecha vencimiento">
+              <Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm((f) => ({ ...f, fecha_vencimiento: e.target.value }))} />
+            </FormField>
+          </div>
+
           <div className="flex gap-2 pt-1">
             <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
             <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
@@ -324,6 +343,11 @@ export default function VentasPage() {
                       <p className="font-semibold text-green-700">{formatMxn(v.monto_total)}</p>
                       {v.numero_venta && (
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{v.numero_venta}</span>
+                      )}
+                      {v.status_pago !== 'pagado' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${v.status_pago === 'pendiente' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                          {v.status_pago === 'pendiente' ? 'Pendiente' : 'Parcial'}
+                        </span>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">

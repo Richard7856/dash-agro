@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import { FORMAS_PAGO } from '@/lib/constants'
-import type { Compra, Persona, Proveedor, Ubicacion, FormaPago } from '@/lib/types/database.types'
+import type { Compra, Persona, Proveedor, Ubicacion, FormaPago, StatusPago } from '@/lib/types/database.types'
 
 const emptyForm = () => ({
   numero_compra: generateNumeroCompra(),
@@ -22,6 +22,8 @@ const emptyForm = () => ({
   monto_total: '',
   gastos: '',
   notas: '',
+  status_pago: 'pagado' as StatusPago,
+  fecha_vencimiento: '',
 })
 
 export default function ComprasPage() {
@@ -110,6 +112,8 @@ export default function ComprasPage() {
       monto_total: String(c.monto_total),
       gastos: c.gastos != null ? String(c.gastos) : '',
       notas: c.notas ?? '',
+      status_pago: c.status_pago,
+      fecha_vencimiento: c.fecha_vencimiento ?? '',
     })
     setError('')
     setView('form')
@@ -138,6 +142,8 @@ export default function ComprasPage() {
       monto_total: parseFloat(form.monto_total),
       gastos: form.gastos ? parseFloat(form.gastos) : 0,
       notas: form.notas || null,
+      status_pago: form.status_pago,
+      fecha_vencimiento: form.fecha_vencimiento || null,
     }
 
     let err
@@ -230,6 +236,19 @@ export default function ComprasPage() {
             <Textarea placeholder="Observaciones opcionales..." value={form.notas} onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))} />
           </FormField>
 
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Estado de pago">
+              <Select value={form.status_pago} onChange={(e) => setForm((f) => ({ ...f, status_pago: e.target.value as StatusPago }))}>
+                <option value="pagado">Pagado</option>
+                <option value="parcial">Parcial</option>
+                <option value="pendiente">Pendiente</option>
+              </Select>
+            </FormField>
+            <FormField label="Fecha vencimiento">
+              <Input type="date" value={form.fecha_vencimiento} onChange={(e) => setForm((f) => ({ ...f, fecha_vencimiento: e.target.value }))} />
+            </FormField>
+          </div>
+
           <div className="flex gap-2 pt-1">
             <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
             <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
@@ -317,6 +336,11 @@ export default function ComprasPage() {
                       <p className="font-semibold text-[var(--nm-text)]">{formatMxn(c.monto_total)}</p>
                       {c.numero_compra && (
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{c.numero_compra}</span>
+                      )}
+                      {c.status_pago !== 'pagado' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.status_pago === 'pendiente' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                          {c.status_pago === 'pendiente' ? 'Pendiente' : 'Parcial'}
+                        </span>
                       )}
                     </div>
                     {c.descripcion && <p className="text-sm text-gray-700 mt-0.5">{c.descripcion}</p>}

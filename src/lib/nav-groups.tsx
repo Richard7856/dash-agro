@@ -107,6 +107,55 @@ export const NAV_GROUPS = [
     ],
   },
   {
+    label: 'FINANZAS',
+    items: [
+      {
+        href: '/facturacion',
+        label: 'Facturación',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10,9 9,9 8,9" />
+          </svg>
+        ),
+      },
+      {
+        href: '/cxc',
+        label: 'Cuentas por Cobrar',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23,6 13.5,15.5 8.5,10.5 1,18" />
+            <polyline points="17,6 23,6 23,12" />
+          </svg>
+        ),
+      },
+      {
+        href: '/cxp',
+        label: 'Cuentas por Pagar',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23,18 13.5,8.5 8.5,13.5 1,6" />
+            <polyline points="17,18 23,18 23,12" />
+          </svg>
+        ),
+      },
+      {
+        href: '/reportes',
+        label: 'Reportes',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
     label: 'HERRAMIENTAS',
     items: [
       {

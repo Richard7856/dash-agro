@@ -71,3 +71,17 @@ export function monthRange(offset: number): { inicio: string; fin: string; label
 export function generateNumeroVenta(): string {
   return generateFolio('VENTA')
 }
+
+export function generateNumeroFactura(): string {
+  return generateFolio('FAC')
+}
+
+import type { StatusPago } from '@/lib/types/database.types'
+export function formatStatusPago(s: StatusPago): string {
+  const labels: Record<StatusPago, string> = {
+    pendiente: 'Pendiente',
+    parcial:   'Parcial',
+    pagado:    'Pagado',
+  }
+  return labels[s] ?? s
+}
