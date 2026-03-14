@@ -10,7 +10,19 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import { FORMAS_PAGO } from '@/lib/constants'
-import type { Venta, Persona, Cliente, Ubicacion, FormaPago, StatusPago } from '@/lib/types/database.types'
+import type { Venta, Persona, Cliente, Ubicacion, FormaPago, StatusPago, InventarioRegistro, UnidadMedida } from '@/lib/types/database.types'
+import { FotoUploader } from '@/components/ui/FotoUploader'
+
+// Item local (en el formulario, antes de guardar)
+interface VentaItemLocal {
+  inventario_registro_id: string
+  nombre: string
+  unidad: UnidadMedida
+  disponible: number
+  lote: string | null
+  cantidad: string
+  precio_unitario: string
+}
 
 const emptyForm = () => ({
   numero_venta: generateNumeroVenta(),
@@ -20,7 +32,6 @@ const emptyForm = () => ({
   cliente_id: '',
   vendedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
-  monto_total: '',
   gastos_extras: '',
   notas: '',
   status_pago: 'pagado' as StatusPago,
@@ -38,6 +49,13 @@ export default function VentasPage() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [formFotos, setFormFotos] = useState<string[]>([])
+
+  // Items de inventario para esta venta
+  const [items, setItems] = useState<VentaItemLocal[]>([])
+  const [busquedaProducto, setBusquedaProducto] = useState('')
+  const [productosResultados, setProductosResultados] = useState<InventarioRegistro[]>([])
+  const [buscandoProducto, setBuscandoProducto] = useState(false)
 
   // Filtros
   const [busqueda, setBusqueda] = useState('')
@@ -50,7 +68,7 @@ export default function VentasPage() {
     const [{ data: ventasData }, { data: personasData }, { data: clientesData }, { data: ubicData }] = await Promise.all([
       supabase
         .from('ventas')
-        .select('*, clientes(nombre), personas(nombre), ubicaciones(nombre)')
+        .select('*, clientes(nombre), personas(nombre), ubicaciones(nombre), ventas_items(*, inventario_registros(nombre_producto, unidad_medida))')
         .order('fecha', { ascending: false })
         .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
@@ -65,6 +83,33 @@ export default function VentasPage() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Buscar productos en inventario (debounced)
+  useEffect(() => {
+    if (!busquedaProducto.trim()) { setProductosResultados([]); return }
+    const t = setTimeout(async () => {
+      setBuscandoProducto(true)
+      const term = `%${busquedaProducto.trim()}%`
+      const { data } = await supabase
+        .from('inventario_registros')
+        .select('*')
+        .or(`nombre_producto.ilike.${term},ean.ilike.${term},sku.ilike.${term}`)
+        .order('nombre_producto')
+        .limit(10)
+      setProductosResultados((data ?? []) as InventarioRegistro[])
+      setBuscandoProducto(false)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [busquedaProducto])
+
+  // Auto-total desde items
+  const montoCalculado = items.reduce((s, i) => {
+    const c = parseFloat(i.cantidad) || 0
+    const p = parseFloat(i.precio_unitario) || 0
+    return s + c * p
+  }, 0)
+
+  const tieneItems = items.length > 0
 
   // Filtrado en cliente
   const ventasFiltradas = useMemo(() => {
@@ -87,10 +132,7 @@ export default function VentasPage() {
   const hayFiltros = busqueda || filtroDesde || filtroHasta || filtroPago
 
   function limpiarFiltros() {
-    setBusqueda('')
-    setFiltroDesde('')
-    setFiltroHasta('')
-    setFiltroPago('')
+    setBusqueda(''); setFiltroDesde(''); setFiltroHasta(''); setFiltroPago('')
   }
 
   const vendedores = personas.filter((p) => p.rol === 'Vendedor')
@@ -98,11 +140,15 @@ export default function VentasPage() {
   function openNew() {
     setEditId(null)
     setForm(emptyForm())
+    setItems([])
+    setFormFotos([])
+    setBusquedaProducto('')
+    setProductosResultados([])
     setError('')
     setView('form')
   }
 
-  function openEdit(v: Venta) {
+  async function openEdit(v: Venta) {
     setEditId(v.id)
     setForm({
       numero_venta: v.numero_venta ?? '',
@@ -112,18 +158,79 @@ export default function VentasPage() {
       cliente_id: v.cliente_id ?? '',
       vendedor_id: v.vendedor_id ?? '',
       forma_pago: v.forma_pago,
-      monto_total: String(v.monto_total),
       gastos_extras: v.gastos_extras != null ? String(v.gastos_extras) : '',
       notas: v.notas ?? '',
       status_pago: v.status_pago,
       fecha_vencimiento: v.fecha_vencimiento ?? '',
     })
+
+    // Cargar items existentes con stock actual
+    const { data: existingItems } = await supabase
+      .from('ventas_items')
+      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, ean, sku, numero_lote)')
+      .eq('venta_id', v.id)
+
+    const loaded: VentaItemLocal[] = (existingItems ?? []).map((it: any) => ({
+      inventario_registro_id: it.inventario_registro_id,
+      nombre: it.inventario_registros?.nombre_producto ?? '',
+      unidad: it.inventario_registros?.unidad_medida ?? 'unidad',
+      disponible: (it.inventario_registros?.cantidad ?? 0) + it.cantidad, // restore = actual + lo que ya se vendió
+      lote: it.inventario_registros?.numero_lote ?? null,
+      cantidad: String(it.cantidad),
+      precio_unitario: String(it.precio_unitario),
+    }))
+
+    setItems(loaded)
+    setFormFotos(v.fotos ?? [])
+    setBusquedaProducto('')
+    setProductosResultados([])
     setError('')
     setView('form')
   }
 
+  function agregarProducto(p: InventarioRegistro) {
+    // No duplicar el mismo lote
+    if (items.some((i) => i.inventario_registro_id === p.id)) return
+    setItems((prev) => [...prev, {
+      inventario_registro_id: p.id,
+      nombre: p.nombre_producto,
+      unidad: p.unidad_medida,
+      disponible: p.cantidad,
+      lote: p.numero_lote ?? null,
+      cantidad: '1',
+      precio_unitario: '',
+    }])
+    setBusquedaProducto('')
+    setProductosResultados([])
+  }
+
+  function removeItem(idx: number) {
+    setItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta venta?')) return
+
+    // Restaurar inventario antes de borrar
+    const { data: ventaItems } = await supabase
+      .from('ventas_items')
+      .select('inventario_registro_id, cantidad')
+      .eq('venta_id', id)
+
+    for (const item of ventaItems ?? []) {
+      const { data: inv } = await supabase
+        .from('inventario_registros')
+        .select('cantidad')
+        .eq('id', item.inventario_registro_id)
+        .single()
+      if (inv) {
+        await supabase
+          .from('inventario_registros')
+          .update({ cantidad: inv.cantidad + item.cantidad })
+          .eq('id', item.inventario_registro_id)
+      }
+    }
+
     const { error: delErr } = await supabase.from('ventas').delete().eq('id', id)
     if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
     setVentas((vs) => vs.filter((v) => v.id !== id))
@@ -131,7 +238,9 @@ export default function VentasPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.fecha || !form.monto_total) { setError('Fecha y monto son requeridos'); return }
+    const montoFinal = tieneItems ? montoCalculado : 0
+    if (!form.fecha) { setError('La fecha es requerida'); return }
+    if (!tieneItems && montoFinal === 0) { setError('Agrega productos o un monto total'); return }
     setSaving(true)
     setError('')
 
@@ -143,21 +252,65 @@ export default function VentasPage() {
       cliente_id: form.cliente_id || null,
       vendedor_id: form.vendedor_id || null,
       forma_pago: form.forma_pago,
-      monto_total: parseFloat(form.monto_total),
+      monto_total: montoFinal,
       gastos_extras: form.gastos_extras ? parseFloat(form.gastos_extras) : 0,
       notas: form.notas || null,
       status_pago: form.status_pago,
       fecha_vencimiento: form.fecha_vencimiento || null,
+      fotos: formFotos,
     }
 
-    let err
     if (editId) {
-      ({ error: err } = await supabase.from('ventas').update(payload).eq('id', editId))
+      // Revertir items anteriores
+      const { data: oldItems } = await supabase
+        .from('ventas_items')
+        .select('inventario_registro_id, cantidad')
+        .eq('venta_id', editId)
+
+      for (const old of oldItems ?? []) {
+        const { data: inv } = await supabase
+          .from('inventario_registros').select('cantidad').eq('id', old.inventario_registro_id).single()
+        if (inv) {
+          await supabase.from('inventario_registros')
+            .update({ cantidad: inv.cantidad + old.cantidad })
+            .eq('id', old.inventario_registro_id)
+        }
+      }
+
+      const { error: updErr } = await supabase.from('ventas').update(payload).eq('id', editId)
+      if (updErr) { setError(`Error: ${updErr.message}`); setSaving(false); return }
+
+      await supabase.from('ventas_items').delete().eq('venta_id', editId)
     } else {
-      ({ error: err } = await supabase.from('ventas').insert(payload))
+      const { data: inserted, error: insErr } = await supabase.from('ventas').insert(payload).select('id').single()
+      if (insErr || !inserted) { setError(`Error: ${insErr?.message}`); setSaving(false); return }
+      ;(payload as any)._id = inserted.id
     }
 
-    if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
+    const ventaId = editId ?? (payload as any)._id
+    if (!ventaId) { setSaving(false); setView('list'); loadData(); return }
+
+    // Insertar nuevos items + decrementar inventario
+    for (const item of items) {
+      const cant = parseFloat(item.cantidad) || 0
+      const precio = parseFloat(item.precio_unitario) || 0
+      if (cant <= 0) continue
+
+      await supabase.from('ventas_items').insert({
+        venta_id: ventaId,
+        inventario_registro_id: item.inventario_registro_id,
+        cantidad: cant,
+        precio_unitario: precio,
+      })
+
+      const { data: inv } = await supabase
+        .from('inventario_registros').select('cantidad').eq('id', item.inventario_registro_id).single()
+      if (inv) {
+        await supabase.from('inventario_registros')
+          .update({ cantidad: Math.max(0, inv.cantidad - cant) })
+          .eq('id', item.inventario_registro_id)
+      }
+    }
 
     setSaving(false)
     setView('list')
@@ -187,20 +340,118 @@ export default function VentasPage() {
             <FormField label="Fecha" required>
               <Input type="date" value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} required />
             </FormField>
-            <FormField label="Monto total (MXN)" required>
-              <Input
-                type="number" min="0" step="0.01" placeholder="0.00"
-                value={form.monto_total}
-                onChange={(e) => setForm((f) => ({ ...f, monto_total: e.target.value }))}
-                required
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <FormField label="Fecha de entrega">
               <Input type="date" value={form.fecha_entrega} onChange={(e) => setForm((f) => ({ ...f, fecha_entrega: e.target.value }))} />
             </FormField>
+          </div>
+
+          {/* Productos de inventario */}
+          <div className="border border-gray-200 rounded-xl p-3 bg-white">
+            <p className="text-sm font-semibold text-[var(--nm-text)] mb-2">Productos vendidos</p>
+
+            {/* Buscador */}
+            <div className="relative mb-2">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar producto por nombre, EAN, SKU…"
+                value={busquedaProducto}
+                onChange={(e) => setBusquedaProducto(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+              />
+            </div>
+
+            {/* Resultados de búsqueda */}
+            {buscandoProducto && <p className="text-xs text-[var(--nm-text-subtle)] px-1 mb-2">Buscando…</p>}
+            {productosResultados.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden mb-2">
+                {productosResultados.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => agregarProducto(p)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-green-50 border-b last:border-b-0 border-gray-100 text-left"
+                  >
+                    <div>
+                      <span className="font-medium text-[var(--nm-text)]">{p.nombre_producto}</span>
+                      {p.numero_lote && <span className="text-xs text-[var(--nm-text-subtle)] ml-2">Lote: {p.numero_lote}</span>}
+                    </div>
+                    <span className={`text-xs font-semibold ml-2 shrink-0 ${p.cantidad <= 0 ? 'text-red-500' : 'text-green-700'}`}>
+                      {p.cantidad} {p.unidad_medida}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Lista de ítems seleccionados */}
+            {items.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {items.map((item, idx) => {
+                  const cant = parseFloat(item.cantidad) || 0
+                  const precio = parseFloat(item.precio_unitario) || 0
+                  const subtotal = cant * precio
+                  const stockBajo = cant > item.disponible
+                  return (
+                    <div key={item.inventario_registro_id} className={`rounded-lg p-2 border text-sm ${stockBajo ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-[var(--nm-text)] truncate">{item.nombre}</p>
+                          {item.lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {item.lote}</p>}
+                          {stockBajo && (
+                            <p className="text-xs text-amber-600 font-medium">⚠ Solo {item.disponible} {item.unidad} disponibles</p>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0 mt-0.5">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <label className="text-xs text-[var(--nm-text-subtle)]">Cantidad ({item.unidad})</label>
+                          <input
+                            type="number" min="0.001" step="0.001"
+                            value={item.cantidad}
+                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: e.target.value } : it))}
+                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-green-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-[var(--nm-text-subtle)]">Precio venta (MXN)</label>
+                          <input
+                            type="number" min="0" step="0.01" placeholder="0.00"
+                            value={item.precio_unitario}
+                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: e.target.value } : it))}
+                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-green-500"
+                          />
+                        </div>
+                      </div>
+                      {subtotal > 0 && (
+                        <p className="text-xs text-green-700 font-semibold mt-1 text-right">{formatMxn(subtotal)}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {tieneItems && (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-[var(--nm-text-subtle)]">{items.length} producto{items.length !== 1 ? 's' : ''}</span>
+                <span className="text-sm font-bold text-green-700">Total: {formatMxn(montoCalculado)}</span>
+              </div>
+            )}
+
+            {items.length === 0 && !buscandoProducto && !busquedaProducto && (
+              <p className="text-xs text-[var(--nm-text-subtle)] text-center py-2">Busca y agrega productos del inventario</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <FormField label="Gastos extra (MXN)">
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
@@ -208,21 +459,19 @@ export default function VentasPage() {
                 onChange={(e) => setForm((f) => ({ ...f, gastos_extras: e.target.value }))}
               />
             </FormField>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
             <FormField label="Forma de pago">
               <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </Select>
             </FormField>
-            <FormField label="Cliente">
-              <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-                <option value="">— Ninguno —</option>
-                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </Select>
-            </FormField>
           </div>
+
+          <FormField label="Cliente">
+            <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
+              <option value="">— Ninguno —</option>
+              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </Select>
+          </FormField>
 
           {vendedores.length > 0 && (
             <FormField label="Vendedor">
@@ -257,9 +506,17 @@ export default function VentasPage() {
             </FormField>
           </div>
 
+          {/* Fotos de evidencia */}
+          <div className="border border-gray-200 rounded-xl p-3 bg-white">
+            <p className="text-sm font-semibold text-[var(--nm-text)] mb-2">Fotos de evidencia</p>
+            <FotoUploader fotos={formFotos} onChange={setFormFotos} tabla="ventas" maxFotos={5} />
+          </div>
+
           <div className="flex gap-2 pt-1">
             <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
-            <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
+            <Btn type="submit" loading={saving} className="flex-1">
+              {tieneItems ? `Guardar (${formatMxn(montoCalculado)})` : 'Guardar'}
+            </Btn>
           </div>
         </form>
       </div>
@@ -334,45 +591,66 @@ export default function VentasPage() {
           : <EmptyState message="No hay ventas registradas" action={{ label: 'Registrar primera', onClick: openNew }} />
       ) : (
         <div className="flex flex-col gap-2">
-          {ventasFiltradas.map((v) => (
-            <div key={v.id} className="nm-card overflow-hidden">
-              <div className="p-4">
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-green-700">{formatMxn(v.monto_total)}</p>
-                      {v.numero_venta && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{v.numero_venta}</span>
+          {ventasFiltradas.map((v) => {
+            const ventaItems = (v as any).ventas_items as Array<{ cantidad: number; precio_unitario: number; inventario_registros: { nombre_producto: string; unidad_medida: string } | null }> | undefined
+            return (
+              <div key={v.id} className="nm-card overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-green-700">{formatMxn(v.monto_total)}</p>
+                        {v.numero_venta && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{v.numero_venta}</span>
+                        )}
+                        {v.status_pago !== 'pagado' && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${v.status_pago === 'pendiente' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                            {v.status_pago === 'pendiente' ? 'Pendiente' : 'Parcial'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
+                        <span>{formatDate(v.fecha)}</span>
+                        {v.fecha_entrega && <span>Entrega: {formatDate(v.fecha_entrega)}</span>}
+                        {((v.clientes as { nombre: string } | null)?.nombre ?? (v.personas as { nombre: string } | null)?.nombre) && (
+                          <span>{(v.clientes as { nombre: string } | null)?.nombre ?? (v.personas as { nombre: string } | null)?.nombre}</span>
+                        )}
+                        <span>{formatFormaPago(v.forma_pago)}</span>
+                        {v.gastos_extras ? <span>+{formatMxn(v.gastos_extras)} extras</span> : null}
+                      </div>
+                      {/* Chips de productos */}
+                      {ventaItems && ventaItems.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {ventaItems.map((it, idx) => (
+                            <span key={idx} className="text-xs bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5">
+                              {it.inventario_registros?.nombre_producto ?? '—'} ×{it.cantidad}
+                            </span>
+                          ))}
+                        </div>
                       )}
-                      {v.status_pago !== 'pagado' && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${v.status_pago === 'pendiente' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
-                          {v.status_pago === 'pendiente' ? 'Pendiente' : 'Parcial'}
-                        </span>
+                      {v.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{v.notas}</p>}
+                      {v.fotos && v.fotos.length > 0 && (
+                        <div className="flex gap-1 mt-2">
+                          {v.fotos.slice(0, 3).map((url) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={url} src={url} alt="" className="w-10 h-10 rounded-md object-cover border border-gray-200" />
+                          ))}
+                          {v.fotos.length > 3 && (
+                            <span className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-xs text-[var(--nm-text-subtle)] font-medium">+{v.fotos.length - 3}</span>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
-                      <span>{formatDate(v.fecha)}</span>
-                      {v.fecha_entrega && <span>Entrega: {formatDate(v.fecha_entrega)}</span>}
-                      {((v.clientes as { nombre: string } | null)?.nombre ?? (v.personas as { nombre: string } | null)?.nombre) && (
-                        <span>{(v.clientes as { nombre: string } | null)?.nombre ?? (v.personas as { nombre: string } | null)?.nombre}</span>
-                      )}
-                      <span>{formatFormaPago(v.forma_pago)}</span>
-                      {(v.ubicaciones as { nombre: string } | null)?.nombre && (
-                        <span>{(v.ubicaciones as { nombre: string }).nombre}</span>
-                      )}
-                      {v.gastos_extras ? <span>+{formatMxn(v.gastos_extras)} extras</span> : null}
-                    </div>
-                    {v.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{v.notas}</p>}
                   </div>
                 </div>
+                <div className="flex border-t border-[var(--nm-bg-inset)]">
+                  <button onClick={() => openEdit(v)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
+                  <div className="w-px bg-gray-100" />
+                  <button onClick={() => handleDelete(v.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>
+                </div>
               </div>
-              <div className="flex border-t border-[var(--nm-bg-inset)]">
-                <button onClick={() => openEdit(v)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
-                <div className="w-px bg-gray-100" />
-                <button onClick={() => handleDelete(v.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

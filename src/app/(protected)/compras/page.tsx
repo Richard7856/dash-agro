@@ -10,7 +10,19 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import { FORMAS_PAGO } from '@/lib/constants'
-import type { Compra, Persona, Proveedor, Ubicacion, FormaPago, StatusPago } from '@/lib/types/database.types'
+import type { Compra, Persona, Proveedor, Ubicacion, FormaPago, StatusPago, InventarioRegistro, UnidadMedida } from '@/lib/types/database.types'
+import { FotoUploader } from '@/components/ui/FotoUploader'
+
+// Item local (en el formulario, antes de guardar)
+interface CompraItemLocal {
+  inventario_registro_id: string
+  nombre: string
+  unidad: UnidadMedida
+  stock_actual: number
+  lote: string | null
+  cantidad: string
+  precio_unitario: string
+}
 
 const emptyForm = () => ({
   numero_compra: generateNumeroCompra(),
@@ -19,7 +31,6 @@ const emptyForm = () => ({
   ubicacion_id: '',
   proveedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
-  monto_total: '',
   gastos: '',
   notas: '',
   status_pago: 'pagado' as StatusPago,
@@ -37,6 +48,13 @@ export default function ComprasPage() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [formFotos, setFormFotos] = useState<string[]>([])
+
+  // Items de inventario para esta compra
+  const [items, setItems] = useState<CompraItemLocal[]>([])
+  const [busquedaProducto, setBusquedaProducto] = useState('')
+  const [productosResultados, setProductosResultados] = useState<InventarioRegistro[]>([])
+  const [buscandoProducto, setBuscandoProducto] = useState(false)
 
   // Filtros
   const [busqueda, setBusqueda] = useState('')
@@ -49,7 +67,7 @@ export default function ComprasPage() {
     const [{ data: comprasData }, { data: personasData }, { data: proveedoresData }, { data: ubicData }] = await Promise.all([
       supabase
         .from('compras')
-        .select('*, proveedores(nombre), personas(nombre), ubicaciones(nombre)')
+        .select('*, proveedores(nombre), personas(nombre), ubicaciones(nombre), compras_items(*, inventario_registros(nombre_producto, unidad_medida))')
         .order('fecha', { ascending: false })
         .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
@@ -64,6 +82,33 @@ export default function ComprasPage() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Buscar productos en inventario (debounced)
+  useEffect(() => {
+    if (!busquedaProducto.trim()) { setProductosResultados([]); return }
+    const t = setTimeout(async () => {
+      setBuscandoProducto(true)
+      const term = `%${busquedaProducto.trim()}%`
+      const { data } = await supabase
+        .from('inventario_registros')
+        .select('*')
+        .or(`nombre_producto.ilike.${term},ean.ilike.${term},sku.ilike.${term}`)
+        .order('nombre_producto')
+        .limit(10)
+      setProductosResultados((data ?? []) as InventarioRegistro[])
+      setBuscandoProducto(false)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [busquedaProducto])
+
+  // Auto-total desde items
+  const montoCalculado = items.reduce((s, i) => {
+    const c = parseFloat(i.cantidad) || 0
+    const p = parseFloat(i.precio_unitario) || 0
+    return s + c * p
+  }, 0)
+
+  const tieneItems = items.length > 0
 
   // Filtrado en cliente
   const comprasFiltradas = useMemo(() => {
@@ -87,20 +132,21 @@ export default function ComprasPage() {
   const hayFiltros = busqueda || filtroDesde || filtroHasta || filtroPago
 
   function limpiarFiltros() {
-    setBusqueda('')
-    setFiltroDesde('')
-    setFiltroHasta('')
-    setFiltroPago('')
+    setBusqueda(''); setFiltroDesde(''); setFiltroHasta(''); setFiltroPago('')
   }
 
   function openNew() {
     setEditId(null)
     setForm(emptyForm())
+    setItems([])
+    setFormFotos([])
+    setBusquedaProducto('')
+    setProductosResultados([])
     setError('')
     setView('form')
   }
 
-  function openEdit(c: Compra) {
+  async function openEdit(c: Compra) {
     setEditId(c.id)
     setForm({
       numero_compra: c.numero_compra ?? '',
@@ -109,18 +155,78 @@ export default function ComprasPage() {
       ubicacion_id: c.ubicacion_id ?? '',
       proveedor_id: c.proveedor_id ?? '',
       forma_pago: c.forma_pago,
-      monto_total: String(c.monto_total),
       gastos: c.gastos != null ? String(c.gastos) : '',
       notas: c.notas ?? '',
       status_pago: c.status_pago,
       fecha_vencimiento: c.fecha_vencimiento ?? '',
     })
+
+    // Cargar items existentes
+    const { data: existingItems } = await supabase
+      .from('compras_items')
+      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, ean, sku, numero_lote)')
+      .eq('compra_id', c.id)
+
+    const loaded: CompraItemLocal[] = (existingItems ?? []).map((it: any) => ({
+      inventario_registro_id: it.inventario_registro_id,
+      nombre: it.inventario_registros?.nombre_producto ?? '',
+      unidad: it.inventario_registros?.unidad_medida ?? 'unidad',
+      stock_actual: (it.inventario_registros?.cantidad ?? 0),
+      lote: it.inventario_registros?.numero_lote ?? null,
+      cantidad: String(it.cantidad),
+      precio_unitario: String(it.precio_unitario),
+    }))
+
+    setItems(loaded)
+    setFormFotos(c.fotos ?? [])
+    setBusquedaProducto('')
+    setProductosResultados([])
     setError('')
     setView('form')
   }
 
+  function agregarProducto(p: InventarioRegistro) {
+    if (items.some((i) => i.inventario_registro_id === p.id)) return
+    setItems((prev) => [...prev, {
+      inventario_registro_id: p.id,
+      nombre: p.nombre_producto,
+      unidad: p.unidad_medida,
+      stock_actual: p.cantidad,
+      lote: p.numero_lote ?? null,
+      cantidad: '1',
+      precio_unitario: String(p.precio_compra_unitario || ''),
+    }])
+    setBusquedaProducto('')
+    setProductosResultados([])
+  }
+
+  function removeItem(idx: number) {
+    setItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta compra?')) return
+
+    // Revertir incremento de inventario
+    const { data: compraItems } = await supabase
+      .from('compras_items')
+      .select('inventario_registro_id, cantidad')
+      .eq('compra_id', id)
+
+    for (const item of compraItems ?? []) {
+      const { data: inv } = await supabase
+        .from('inventario_registros')
+        .select('cantidad')
+        .eq('id', item.inventario_registro_id)
+        .single()
+      if (inv) {
+        await supabase
+          .from('inventario_registros')
+          .update({ cantidad: Math.max(0, inv.cantidad - item.cantidad) })
+          .eq('id', item.inventario_registro_id)
+      }
+    }
+
     const { error: delErr } = await supabase.from('compras').delete().eq('id', id)
     if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
     setCompras((cs) => cs.filter((c) => c.id !== id))
@@ -128,7 +234,9 @@ export default function ComprasPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.fecha || !form.monto_total) { setError('Fecha y monto son requeridos'); return }
+    const montoFinal = tieneItems ? montoCalculado : 0
+    if (!form.fecha) { setError('La fecha es requerida'); return }
+    if (!tieneItems && montoFinal === 0) { setError('Agrega productos o un monto total'); return }
     setSaving(true)
     setError('')
 
@@ -139,21 +247,65 @@ export default function ComprasPage() {
       ubicacion_id: form.ubicacion_id || null,
       proveedor_id: form.proveedor_id || null,
       forma_pago: form.forma_pago,
-      monto_total: parseFloat(form.monto_total),
+      monto_total: montoFinal,
       gastos: form.gastos ? parseFloat(form.gastos) : 0,
       notas: form.notas || null,
       status_pago: form.status_pago,
       fecha_vencimiento: form.fecha_vencimiento || null,
+      fotos: formFotos,
     }
 
-    let err
     if (editId) {
-      ({ error: err } = await supabase.from('compras').update(payload).eq('id', editId))
+      // Revertir items anteriores (decrementar lo que se había incrementado)
+      const { data: oldItems } = await supabase
+        .from('compras_items')
+        .select('inventario_registro_id, cantidad')
+        .eq('compra_id', editId)
+
+      for (const old of oldItems ?? []) {
+        const { data: inv } = await supabase
+          .from('inventario_registros').select('cantidad').eq('id', old.inventario_registro_id).single()
+        if (inv) {
+          await supabase.from('inventario_registros')
+            .update({ cantidad: Math.max(0, inv.cantidad - old.cantidad) })
+            .eq('id', old.inventario_registro_id)
+        }
+      }
+
+      const { error: updErr } = await supabase.from('compras').update(payload).eq('id', editId)
+      if (updErr) { setError(`Error: ${updErr.message}`); setSaving(false); return }
+
+      await supabase.from('compras_items').delete().eq('compra_id', editId)
     } else {
-      ({ error: err } = await supabase.from('compras').insert(payload))
+      const { data: inserted, error: insErr } = await supabase.from('compras').insert(payload).select('id').single()
+      if (insErr || !inserted) { setError(`Error: ${insErr?.message}`); setSaving(false); return }
+      ;(payload as any)._id = inserted.id
     }
 
-    if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
+    const compraId = editId ?? (payload as any)._id
+    if (!compraId) { setSaving(false); setView('list'); loadData(); return }
+
+    // Insertar nuevos items + incrementar inventario
+    for (const item of items) {
+      const cant = parseFloat(item.cantidad) || 0
+      const precio = parseFloat(item.precio_unitario) || 0
+      if (cant <= 0) continue
+
+      await supabase.from('compras_items').insert({
+        compra_id: compraId,
+        inventario_registro_id: item.inventario_registro_id,
+        cantidad: cant,
+        precio_unitario: precio,
+      })
+
+      const { data: inv } = await supabase
+        .from('inventario_registros').select('cantidad').eq('id', item.inventario_registro_id).single()
+      if (inv) {
+        await supabase.from('inventario_registros')
+          .update({ cantidad: inv.cantidad + cant })
+          .eq('id', item.inventario_registro_id)
+      }
+    }
 
     setSaving(false)
     setView('list')
@@ -184,17 +336,117 @@ export default function ComprasPage() {
             <FormField label="Fecha" required>
               <Input type="date" value={form.fecha} onChange={(e) => setForm((f) => ({ ...f, fecha: e.target.value }))} required />
             </FormField>
-            <FormField label="Monto total (MXN)" required>
+            <FormField label="Gastos extra (MXN)">
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
-                value={form.monto_total}
-                onChange={(e) => setForm((f) => ({ ...f, monto_total: e.target.value }))}
-                required
+                value={form.gastos}
+                onChange={(e) => setForm((f) => ({ ...f, gastos: e.target.value }))}
               />
             </FormField>
           </div>
 
-          <FormField label="¿Qué se compró?">
+          {/* Productos de inventario */}
+          <div className="border border-gray-200 rounded-xl p-3 bg-white">
+            <p className="text-sm font-semibold text-[var(--nm-text)] mb-2">Productos recibidos</p>
+
+            {/* Buscador */}
+            <div className="relative mb-2">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Buscar producto por nombre, EAN, SKU…"
+                value={busquedaProducto}
+                onChange={(e) => setBusquedaProducto(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+              />
+            </div>
+
+            {buscandoProducto && <p className="text-xs text-[var(--nm-text-subtle)] px-1 mb-2">Buscando…</p>}
+            {productosResultados.length > 0 && (
+              <div className="border border-gray-200 rounded-lg overflow-hidden mb-2">
+                {productosResultados.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => agregarProducto(p)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0 border-gray-100 text-left"
+                  >
+                    <div>
+                      <span className="font-medium text-[var(--nm-text)]">{p.nombre_producto}</span>
+                      {p.numero_lote && <span className="text-xs text-[var(--nm-text-subtle)] ml-2">Lote: {p.numero_lote}</span>}
+                    </div>
+                    <span className="text-xs font-semibold text-[var(--nm-text-muted)] ml-2 shrink-0">
+                      {p.cantidad} {p.unidad_medida}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {items.length > 0 && (
+              <div className="flex flex-col gap-2 mb-2">
+                {items.map((item, idx) => {
+                  const cant = parseFloat(item.cantidad) || 0
+                  const precio = parseFloat(item.precio_unitario) || 0
+                  const subtotal = cant * precio
+                  return (
+                    <div key={item.inventario_registro_id} className="rounded-lg p-2 border border-blue-100 bg-blue-50 text-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-[var(--nm-text)] truncate">{item.nombre}</p>
+                          {item.lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {item.lote}</p>}
+                          <p className="text-xs text-blue-600">Stock actual: {item.stock_actual} {item.unidad}</p>
+                        </div>
+                        <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0 mt-0.5">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <label className="text-xs text-[var(--nm-text-subtle)]">Cantidad ({item.unidad})</label>
+                          <input
+                            type="number" min="0.001" step="0.001"
+                            value={item.cantidad}
+                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: e.target.value } : it))}
+                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-[var(--nm-text-subtle)]">Precio compra (MXN)</label>
+                          <input
+                            type="number" min="0" step="0.01" placeholder="0.00"
+                            value={item.precio_unitario}
+                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: e.target.value } : it))}
+                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+                      {subtotal > 0 && (
+                        <p className="text-xs text-blue-700 font-semibold mt-1 text-right">{formatMxn(subtotal)}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {tieneItems && (
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs text-[var(--nm-text-subtle)]">{items.length} producto{items.length !== 1 ? 's' : ''}</span>
+                <span className="text-sm font-bold text-blue-700">Total: {formatMxn(montoCalculado)}</span>
+              </div>
+            )}
+
+            {items.length === 0 && !buscandoProducto && !busquedaProducto && (
+              <p className="text-xs text-[var(--nm-text-subtle)] text-center py-2">Busca y selecciona los productos recibidos</p>
+            )}
+          </div>
+
+          <FormField label="¿Qué se compró? (descripción)">
             <Input
               type="text"
               placeholder="Ej. Aguacate Hass 10 cajas"
@@ -209,21 +461,13 @@ export default function ComprasPage() {
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </Select>
             </FormField>
-            <FormField label="Gastos extra (MXN)">
-              <Input
-                type="number" min="0" step="0.01" placeholder="0.00"
-                value={form.gastos}
-                onChange={(e) => setForm((f) => ({ ...f, gastos: e.target.value }))}
-              />
+            <FormField label="Proveedor">
+              <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
+                <option value="">— Ninguno —</option>
+                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </Select>
             </FormField>
           </div>
-
-          <FormField label="Proveedor">
-            <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
-              <option value="">— Ninguno —</option>
-              {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
-          </FormField>
 
           <FormField label="Ubicación">
             <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value }))}>
@@ -249,9 +493,17 @@ export default function ComprasPage() {
             </FormField>
           </div>
 
+          {/* Fotos de evidencia */}
+          <div className="border border-gray-200 rounded-xl p-3 bg-white">
+            <p className="text-sm font-semibold text-[var(--nm-text)] mb-2">Fotos de evidencia</p>
+            <FotoUploader fotos={formFotos} onChange={setFormFotos} tabla="compras" maxFotos={5} />
+          </div>
+
           <div className="flex gap-2 pt-1">
             <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
-            <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
+            <Btn type="submit" loading={saving} className="flex-1">
+              {tieneItems ? `Guardar (${formatMxn(montoCalculado)})` : 'Guardar'}
+            </Btn>
           </div>
         </form>
       </div>
@@ -327,45 +579,66 @@ export default function ComprasPage() {
           : <EmptyState message="No hay compras registradas" action={{ label: 'Registrar primera', onClick: openNew }} />
       ) : (
         <div className="flex flex-col gap-2">
-          {comprasFiltradas.map((c) => (
-            <div key={c.id} className="nm-card overflow-hidden">
-              <div className="p-4">
-                <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-[var(--nm-text)]">{formatMxn(c.monto_total)}</p>
-                      {c.numero_compra && (
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{c.numero_compra}</span>
+          {comprasFiltradas.map((c) => {
+            const compraItems = (c as any).compras_items as Array<{ cantidad: number; precio_unitario: number; inventario_registros: { nombre_producto: string; unidad_medida: string } | null }> | undefined
+            return (
+              <div key={c.id} className="nm-card overflow-hidden">
+                <div className="p-4">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-[var(--nm-text)]">{formatMxn(c.monto_total)}</p>
+                        {c.numero_compra && (
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{c.numero_compra}</span>
+                        )}
+                        {c.status_pago !== 'pagado' && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.status_pago === 'pendiente' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                            {c.status_pago === 'pendiente' ? 'Pendiente' : 'Parcial'}
+                          </span>
+                        )}
+                      </div>
+                      {c.descripcion && <p className="text-sm text-gray-700 mt-0.5">{c.descripcion}</p>}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
+                        <span>{formatDate(c.fecha)}</span>
+                        {((c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre) && (
+                          <span>{(c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre}</span>
+                        )}
+                        <span>{formatFormaPago(c.forma_pago)}</span>
+                        {c.gastos ? <span>+{formatMxn(c.gastos)} gastos</span> : null}
+                      </div>
+                      {/* Chips de productos */}
+                      {compraItems && compraItems.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {compraItems.map((it, idx) => (
+                            <span key={idx} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5">
+                              {it.inventario_registros?.nombre_producto ?? '—'} ×{it.cantidad}
+                            </span>
+                          ))}
+                        </div>
                       )}
-                      {c.status_pago !== 'pagado' && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.status_pago === 'pendiente' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
-                          {c.status_pago === 'pendiente' ? 'Pendiente' : 'Parcial'}
-                        </span>
+                      {c.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{c.notas}</p>}
+                      {c.fotos && c.fotos.length > 0 && (
+                        <div className="flex gap-1 mt-2">
+                          {c.fotos.slice(0, 3).map((url) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={url} src={url} alt="" className="w-10 h-10 rounded-md object-cover border border-gray-200" />
+                          ))}
+                          {c.fotos.length > 3 && (
+                            <span className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-xs text-[var(--nm-text-subtle)] font-medium">+{c.fotos.length - 3}</span>
+                          )}
+                        </div>
                       )}
                     </div>
-                    {c.descripcion && <p className="text-sm text-gray-700 mt-0.5">{c.descripcion}</p>}
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
-                      <span>{formatDate(c.fecha)}</span>
-                      {((c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre) && (
-                        <span>{(c.proveedores as { nombre: string } | null)?.nombre ?? (c.personas as { nombre: string } | null)?.nombre}</span>
-                      )}
-                      <span>{formatFormaPago(c.forma_pago)}</span>
-                      {(c.ubicaciones as { nombre: string } | null)?.nombre && (
-                        <span>{(c.ubicaciones as { nombre: string }).nombre}</span>
-                      )}
-                      {c.gastos ? <span>+{formatMxn(c.gastos)} gastos</span> : null}
-                    </div>
-                    {c.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{c.notas}</p>}
                   </div>
                 </div>
+                <div className="flex border-t border-[var(--nm-bg-inset)]">
+                  <button onClick={() => openEdit(c)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
+                  <div className="w-px bg-gray-100" />
+                  <button onClick={() => handleDelete(c.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>
+                </div>
               </div>
-              <div className="flex border-t border-[var(--nm-bg-inset)]">
-                <button onClick={() => openEdit(c)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
-                <div className="w-px bg-gray-100" />
-                <button onClick={() => handleDelete(c.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

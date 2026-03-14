@@ -139,7 +139,7 @@ export default function ProveedoresPage() {
         <FormField label="Notas">
           <textarea rows={2} placeholder="Notas adicionales..." value={form.notas}
             onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))}
-            className="w-full px-3 py-2 rounded-lg border border-gray-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent resize-none" />
+            className="nm-input w-full px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)] resize-none" />
         </FormField>
         <div className="flex gap-2 pt-1">
           <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
@@ -221,7 +221,7 @@ export default function ProveedoresPage() {
         </svg>
         <input type="text" placeholder="Buscar por nombre o RFC..." value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent" />
+          className="nm-input w-full pl-9 pr-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]" />
       </div>
 
       {filtered.length === 0 ? (

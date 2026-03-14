@@ -1,137 +1,172 @@
 @import "tailwindcss";
 
 @theme {
-  --color-green-50: #f0fdf4;
+  --color-green-50:  #f0fdf4;
   --color-green-100: #dcfce7;
   --color-green-600: #16a34a;
   --color-green-700: #15803d;
   --color-green-800: #166534;
 
-  /* Neumorphic surface tokens */
+  /* Page background — sage green */
   --nm-bg:           #e8ede9;
-  --nm-bg-inset:     #d4dcd5;
+  --nm-bg-inset:     #d8e1da;
   --nm-shadow-light: #ffffff;
-  --nm-shadow-dark:  #bec9bf;
-  --nm-radius:       1.25rem;
-  --nm-radius-sm:    0.875rem;
+  --nm-shadow-dark:  #bcc6be;
+  --nm-radius:       1rem;
+  --nm-radius-sm:    0.75rem;
 
-  /* Text on nm surface */
-  --nm-text:         #2d3a2e;
-  --nm-text-muted:   #5a7060;
-  --nm-text-subtle:  #8aa48e;
+  /* Text */
+  --nm-text:         #1e2d20;
+  --nm-text-muted:   #4b6350;
+  --nm-text-subtle:  #7a9880;
 
-  /* Accent */
+  /* Accent / Primary */
   --nm-accent:       #16a34a;
   --nm-accent-dark:  #15803d;
+  --nm-primary:      #16a34a;
+  --nm-primary-dark: #15803d;
 }
 
-/* ── Neumorphic utility classes ──────────────────────────────────────────── */
+/* ── Cards — white surface on green background ───────────────────────────── */
+
+.nm-card {
+  background: #ffffff;
+  border-radius: var(--nm-radius);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.nm-card-sm {
+  background: #ffffff;
+  border-radius: var(--nm-radius-sm);
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Inset used for search bars, secondary surfaces */
+.nm-inset {
+  background: var(--nm-bg-inset);
+  border-radius: var(--nm-radius-sm);
+  box-shadow: inset 2px 2px 5px var(--nm-shadow-dark), inset -2px -2px 5px var(--nm-shadow-light);
+}
+
+/* ── Inputs — clean white with clear focus ───────────────────────────────── */
+
+.nm-input {
+  background: #ffffff;
+  border: 1.5px solid #d1d9d2;
+  border-radius: var(--nm-radius-sm);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  appearance: auto;
+}
+.nm-input:focus {
+  outline: none;
+  border-color: var(--nm-accent);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
+}
+.nm-input:disabled {
+  background: #f3f7f4;
+  color: var(--nm-text-subtle);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.nm-btn {
+  background: #ffffff;
+  border: 1.5px solid #d1d9d2;
+  border-radius: var(--nm-radius-sm);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+.nm-btn:hover:not(:disabled) {
+  background: #f4f8f5;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.09);
+}
+.nm-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.nm-btn-primary {
+  background: linear-gradient(145deg, #1bbf57, #14923f);
+  border: none;
+  border-radius: var(--nm-radius-sm);
+  box-shadow: 0 2px 8px rgba(20, 146, 63, 0.35);
+  transition: box-shadow 0.15s ease, transform 0.1s ease, filter 0.15s ease;
+}
+.nm-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 14px rgba(20, 146, 63, 0.45);
+  filter: brightness(1.05);
+}
+.nm-btn-primary:active:not(:disabled) {
+  box-shadow: 0 1px 4px rgba(20, 146, 63, 0.3);
+  transform: translateY(1px);
+}
+
+/* ── Stat/accent cards ───────────────────────────────────────────────────── */
+
+.nm-card-green {
+  background: linear-gradient(135deg, #d4f0db, #c6e8ce);
+  border-radius: var(--nm-radius);
+  border: 1px solid rgba(22, 163, 74, 0.2);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.12);
+}
+
+.nm-card-red {
+  background: linear-gradient(135deg, #fde8e8, #fad8d8);
+  border-radius: var(--nm-radius);
+  border: 1px solid rgba(220, 38, 38, 0.15);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.1);
+}
+
+/* ── Navigation ─────────────────────────────────────────────────────────── */
+
+.nm-nav-active {
+  background: rgba(22, 163, 74, 0.12);
+  border-radius: 0.625rem;
+}
+
+.nm-sidebar {
+  background: #ffffff;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08);
+  border-right: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.nm-top-nav {
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.nm-bottom-nav {
+  background: #ffffff;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+/* ── Page wrapper ────────────────────────────────────────────────────────── */
 
 .nm-page {
   background-color: var(--nm-bg);
   min-height: 100vh;
 }
 
-.nm-card {
-  background: var(--nm-bg);
-  border-radius: var(--nm-radius);
-  box-shadow: 6px 6px 12px var(--nm-shadow-dark), -6px -6px 12px var(--nm-shadow-light);
-}
+/* ── Safe area / misc ────────────────────────────────────────────────────── */
 
-.nm-card-sm {
-  background: var(--nm-bg);
-  border-radius: var(--nm-radius-sm);
-  box-shadow: 4px 4px 8px var(--nm-shadow-dark), -4px -4px 8px var(--nm-shadow-light);
-}
-
-.nm-inset {
-  background: var(--nm-bg-inset);
-  border-radius: var(--nm-radius-sm);
-  box-shadow: inset 3px 3px 7px var(--nm-shadow-dark), inset -3px -3px 7px var(--nm-shadow-light);
-}
-
-.nm-btn {
-  background: var(--nm-bg);
-  border-radius: var(--nm-radius-sm);
-  box-shadow: 4px 4px 8px var(--nm-shadow-dark), -4px -4px 8px var(--nm-shadow-light);
-  transition: box-shadow 0.15s ease, transform 0.1s ease;
-}
-.nm-btn:active {
-  box-shadow: inset 2px 2px 5px var(--nm-shadow-dark), inset -2px -2px 5px var(--nm-shadow-light);
-  transform: translateY(1px);
-}
-
-.nm-btn-primary {
-  background: linear-gradient(145deg, #1bbf57, #14923f);
-  border-radius: var(--nm-radius-sm);
-  box-shadow: 4px 4px 8px #a8c9af, -4px -4px 8px #e8fce8;
-  transition: box-shadow 0.15s ease, transform 0.1s ease;
-}
-.nm-btn-primary:active {
-  box-shadow: inset 2px 2px 5px #0d7a34, inset -2px -2px 5px #22d96a;
-  transform: translateY(1px);
-}
-
-.nm-input {
-  background: var(--nm-bg-inset);
-  border: none;
-  border-radius: var(--nm-radius-sm);
-  box-shadow: inset 2px 2px 6px var(--nm-shadow-dark), inset -2px -2px 6px var(--nm-shadow-light);
-}
-.nm-input:focus {
-  outline: 2px solid var(--nm-accent);
-  outline-offset: 1px;
-}
-
-.nm-card-green {
-  background: linear-gradient(145deg, #d0e8d4, #c4dfc8);
-  border-radius: var(--nm-radius);
-  box-shadow: 6px 6px 12px #b3ccb7, -6px -6px 12px #e8fce8;
-}
-
-.nm-card-red {
-  background: linear-gradient(145deg, #e8d4d4, #dfc4c4);
-  border-radius: var(--nm-radius);
-  box-shadow: 6px 6px 12px #ccb3b3, -6px -6px 12px #fce8e8;
-}
-
-.nm-nav-active {
-  background: var(--nm-bg-inset);
-  box-shadow: inset 2px 2px 5px var(--nm-shadow-dark), inset -2px -2px 5px var(--nm-shadow-light);
-}
-
-.nm-sidebar {
-  background: var(--nm-bg);
-  box-shadow: 4px 0 10px var(--nm-shadow-dark);
-}
-
-.nm-top-nav {
-  background: var(--nm-bg);
-  box-shadow: 0 3px 8px var(--nm-shadow-dark), 0 1px 4px var(--nm-shadow-light);
-}
-
-.nm-bottom-nav {
-  background: var(--nm-bg);
-  box-shadow: 0 -3px 8px var(--nm-shadow-dark), 0 -1px 4px var(--nm-shadow-light);
-}
-
-/* Safe area for iPhone notch / home indicator */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Smooth scrolling */
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
 }
 
-/* Better touch tap */
 button, a, [role="button"] {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Remove number input spinners */
 input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;

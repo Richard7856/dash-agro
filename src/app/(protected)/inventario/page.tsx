@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import type { InventarioRegistro, Ubicacion, UnidadMedida } from '@/lib/types/database.types'
+import { FotoUploader } from '@/components/ui/FotoUploader'
 
 const EanScanner = dynamic(() => import('@/components/inventario/EanScanner').then((m) => m.EanScanner), { ssr: false })
 
@@ -52,6 +53,7 @@ export default function InventarioPage() {
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [formFotos, setFormFotos] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
   const [hasCamera, setHasCamera] = useState(false)
 
@@ -59,15 +61,33 @@ export default function InventarioPage() {
   const [eanDuplicates, setEanDuplicates] = useState<InventarioRegistro[]>([])
   const [showEanWarning, setShowEanWarning] = useState(false)
 
+  // Búsqueda y filtros
+  const [busqueda, setBusqueda] = useState('')
+  const [debouncedBusqueda, setDebouncedBusqueda] = useState('')
+  const [filtroVencimiento, setFiltroVencimiento] = useState<'' | 'pronto' | 'caducado' | 'vigente' | 'sin_fecha'>('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+  const [showFiltros, setShowFiltros] = useState(false)
+
   // Paginación
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<PageSize>(20)
   const [totalCount, setTotalCount] = useState(0)
+  const [totalCantidad, setTotalCantidad] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     setHasCamera(typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
   }, [])
+
+  // Debounce búsqueda 400ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedBusqueda(busqueda), 400)
+    return () => clearTimeout(t)
+  }, [busqueda])
+
+  // Reset página al cambiar filtros
+  useEffect(() => { setPage(1) }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta])
 
   // Ubicaciones: solo una vez al montar
   useEffect(() => {
@@ -75,22 +95,48 @@ export default function InventarioPage() {
       .then(({ data }) => setUbicaciones(data ?? []))
   }, [])
 
+  // Aplica filtros activos a cualquier query de Supabase
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const applyFilters = useCallback(<T,>(q: T): T => {
+    const today = new Date().toISOString().split('T')[0]
+    const soon = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+    if (debouncedBusqueda.trim()) {
+      const term = `%${debouncedBusqueda.trim()}%`
+      q = (q as any).or(`nombre_producto.ilike.${term},ean.ilike.${term},sku.ilike.${term},numero_lote.ilike.${term}`)
+    }
+    if (filtroVencimiento === 'pronto')    q = (q as any).gte('fecha_caducidad', today).lte('fecha_caducidad', soon)
+    if (filtroVencimiento === 'caducado')  q = (q as any).lt('fecha_caducidad', today)
+    if (filtroVencimiento === 'vigente')   q = (q as any).gt('fecha_caducidad', soon)
+    if (filtroVencimiento === 'sin_fecha') q = (q as any).is('fecha_caducidad', null)
+    if (filtroDesde) q = (q as any).gte('created_at', filtroDesde)
+    if (filtroHasta) q = (q as any).lte('created_at', filtroHasta + 'T23:59:59')
+    return q
+  }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
 
-    const { data: regs, count } = await supabase
-      .from('inventario_registros')
-      .select('*, ubicaciones(nombre)', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(from, to)
+    const { data: regs, count } = await applyFilters(
+      supabase
+        .from('inventario_registros')
+        .select('*, ubicaciones(nombre)', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    )
 
     setRegistros((regs ?? []) as InventarioRegistro[])
     setTotalCount(count ?? 0)
+
+    const { data: cantData } = await applyFilters(
+      supabase.from('inventario_registros').select('cantidad')
+    )
+    setTotalCantidad((cantData ?? []).reduce((s, r) => s + ((r as { cantidad: number }).cantidad ?? 0), 0))
+
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, refreshKey])
+  }, [page, pageSize, refreshKey, applyFilters])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -104,6 +150,7 @@ export default function InventarioPage() {
   function openNew() {
     setEditId(null)
     setForm(emptyForm())
+    setFormFotos([])
     setError('')
     setEanDuplicates([])
     setShowEanWarning(false)
@@ -127,6 +174,7 @@ export default function InventarioPage() {
       fecha_caducidad: r.fecha_caducidad ?? '',
       ubicacion_id: r.ubicacion_id ?? '',
     })
+    setFormFotos(r.fotos ?? [])
     setError('')
     setView('form')
   }
@@ -164,6 +212,7 @@ export default function InventarioPage() {
       numero_lote: form.numero_lote || generateLote(),
       fecha_caducidad: form.fecha_caducidad || null,
       ubicacion_id: form.ubicacion_id || null,
+      fotos: formFotos,
     }
 
     let err
@@ -222,6 +271,13 @@ export default function InventarioPage() {
     const s = getExpiryStatus(r.fecha_caducidad ?? null)
     return s === 'soon' || s === 'expired'
   }).length
+
+  // Filtros activos
+  const hayFiltros = !!(debouncedBusqueda || filtroVencimiento || filtroDesde || filtroHasta)
+  const filtrosActivos = [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta].filter(Boolean).length
+  function limpiarFiltros() {
+    setBusqueda(''); setDebouncedBusqueda(''); setFiltroVencimiento(''); setFiltroDesde(''); setFiltroHasta('')
+  }
 
   const totalPages = Math.ceil(totalCount / pageSize)
   const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
@@ -353,6 +409,12 @@ export default function InventarioPage() {
             </Select>
           </FormField>
 
+          {/* Fotos de evidencia */}
+          <div className="border border-gray-200 rounded-xl p-3 bg-white">
+            <p className="text-sm font-semibold text-[var(--nm-text)] mb-2">Fotos del producto</p>
+            <FotoUploader fotos={formFotos} onChange={setFormFotos} tabla="inventario" maxFotos={5} />
+          </div>
+
           {/* Aviso EAN duplicado */}
           {showEanWarning && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex flex-col gap-3">
@@ -424,16 +486,122 @@ export default function InventarioPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Inventario"
-        subtitle={`${totalCount} registros en total`}
+        subtitle={`${hayFiltros ? `${totalCount} resultado${totalCount !== 1 ? 's' : ''}` : `${totalCount} registros en total`}`}
         action={{ label: 'Nuevo registro', onClick: openNew }}
       />
 
+      {/* Búsqueda + Filtros */}
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="flex gap-2">
+          {/* Input búsqueda */}
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar por nombre, EAN, SKU, lote…"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+            />
+            {busqueda && (
+              <button onClick={() => setBusqueda('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--nm-text-subtle)] hover:text-[var(--nm-text)]">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            )}
+          </div>
+          {/* Toggle filtros */}
+          <button
+            onClick={() => setShowFiltros((v) => !v)}
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors ${showFiltros ? 'bg-green-600 text-white border-green-600' : 'bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-green-400'}`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+            Filtros
+            {filtrosActivos > 0 && (
+              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1 ${showFiltros ? 'bg-white text-green-600' : 'bg-green-600 text-white'}`}>
+                {filtrosActivos}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Panel de filtros colapsable */}
+        {showFiltros && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-4">
+            {/* Vencimiento */}
+            <div>
+              <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wider mb-2">Vencimiento</p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { value: '', label: 'Todos' },
+                  { value: 'pronto', label: '⚠ Pronto ≤7d' },
+                  { value: 'caducado', label: '🔴 Caducados' },
+                  { value: 'vigente', label: '✅ Vigentes' },
+                  { value: 'sin_fecha', label: 'Sin fecha' },
+                ] as const).map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setFiltroVencimiento(value)}
+                    className={`px-3 py-1.5 text-xs rounded-full font-medium border transition-colors ${
+                      filtroVencimiento === value
+                        ? value === 'caducado' ? 'bg-red-600 text-white border-red-600'
+                          : value === 'pronto' ? 'bg-amber-500 text-white border-amber-500'
+                          : value === 'vigente' ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-gray-700 text-white border-gray-700'
+                        : 'bg-gray-50 text-[var(--nm-text-muted)] border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Rango fecha de alta */}
+            <div>
+              <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wider mb-2">Fecha de alta</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-[var(--nm-text-subtle)] mb-1 block">Desde</label>
+                  <input
+                    type="date"
+                    value={filtroDesde}
+                    onChange={(e) => setFiltroDesde(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)]"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[var(--nm-text-subtle)] mb-1 block">Hasta</label>
+                  <input
+                    type="date"
+                    value={filtroHasta}
+                    onChange={(e) => setFiltroHasta(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)]"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {hayFiltros && (
+              <button onClick={limpiarFiltros} className="self-end text-xs text-red-500 hover:text-red-700 font-medium underline">
+                Limpiar todos los filtros
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Stats */}
       {totalCount > 0 && (
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-[var(--nm-text-subtle)]">Total</p>
+            <p className="text-xs text-[var(--nm-text-subtle)]">Productos</p>
             <p className="text-base font-bold text-[var(--nm-text)]">{totalCount}</p>
+          </div>
+          <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
+            <p className="text-xs text-blue-600">Total piezas</p>
+            <p className="text-base font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 2 })}</p>
           </div>
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
             <p className="text-xs text-[var(--nm-text-subtle)]">Valor página</p>
@@ -447,7 +615,9 @@ export default function InventarioPage() {
       )}
 
       {totalCount === 0 ? (
-        <EmptyState message="No hay registros de inventario" action={{ label: 'Agregar primero', onClick: openNew }} />
+        hayFiltros
+          ? <EmptyState message="No hay resultados para los filtros seleccionados" action={{ label: 'Limpiar filtros', onClick: limpiarFiltros }} />
+          : <EmptyState message="No hay registros de inventario" action={{ label: 'Agregar primero', onClick: openNew }} />
       ) : (
         <>
           {/* Controles: rango + selector de página */}
@@ -513,6 +683,19 @@ export default function InventarioPage() {
                           </span>
                         )}
                       </div>
+                      {r.fotos && r.fotos.length > 0 && (
+                        <div className="flex gap-1 mt-2">
+                          {r.fotos.slice(0, 3).map((url) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img key={url} src={url} alt="" className="w-10 h-10 rounded-md object-cover border border-gray-200 cursor-pointer" onClick={() => openEdit(r)} />
+                          ))}
+                          {r.fotos.length > 3 && (
+                            <span className="w-10 h-10 rounded-md bg-gray-100 border border-gray-200 flex items-center justify-center text-xs text-[var(--nm-text-subtle)] font-medium">
+                              +{r.fotos.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col gap-1 shrink-0">
                       <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">

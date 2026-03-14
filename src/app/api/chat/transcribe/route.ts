@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
   groqForm.append('model', 'whisper-large-v3-turbo')
   groqForm.append('language', 'es')
   groqForm.append('response_format', 'json')
+  groqForm.append('prompt', 'Agrodelicias. Inventario, ventas, compras, gastos, clientes, proveedores. Kilogramos, litros, cajas, piezas, tarimas, gramos. Bodega, precio unitario, monto total, folio, proveedor, factura.')
 
   const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
     method: 'POST',

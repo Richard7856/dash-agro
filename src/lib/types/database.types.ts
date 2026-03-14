@@ -70,6 +70,7 @@ interface CompraRow {
   notas: string | null
   status_pago: StatusPago
   fecha_vencimiento: string | null
+  fotos: string[]
   created_at: string
   updated_at: string
 }
@@ -90,6 +91,7 @@ interface VentaRow {
   notas: string | null
   status_pago: StatusPago
   fecha_vencimiento: string | null
+  fotos: string[]
   created_at: string
   updated_at: string
 }
@@ -152,6 +154,7 @@ interface InventarioRegistroRow {
   cajas_por_tarima: number | null
   unidad_medida: UnidadMedida
   ubicacion_id: string | null
+  fotos: string[]
   created_at: string
   updated_at: string
 }
@@ -167,12 +170,14 @@ export interface Compra extends CompraRow {
   proveedores?: { nombre: string } | null
   personas?: { nombre: string } | null
   ubicaciones?: { nombre: string } | null
+  compras_items?: CompraItem[]
 }
 
 export interface Venta extends VentaRow {
   clientes?: { nombre: string } | null
   personas?: { nombre: string } | null
   ubicaciones?: { nombre: string } | null
+  ventas_items?: VentaItem[]
 }
 
 export type ApiKey = ApiKeyRow
@@ -218,6 +223,36 @@ export interface Factura extends FacturaRow {
   facturas_partidas?: FacturaPartida[]
 }
 export type FacturaPartida = FacturaPartidaRow
+
+// ─── Items de venta/compra (enlace con inventario) ──────────────────────────
+
+export interface VentaItemRow {
+  id: string
+  venta_id: string
+  inventario_registro_id: string
+  cantidad: number
+  precio_unitario: number
+  total: number
+  created_at: string
+}
+
+export interface CompraItemRow {
+  id: string
+  compra_id: string
+  inventario_registro_id: string
+  cantidad: number
+  precio_unitario: number
+  total: number
+  created_at: string
+}
+
+export interface VentaItem extends VentaItemRow {
+  inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida' | 'cantidad' | 'ean' | 'sku' | 'numero_lote'> | null
+}
+
+export interface CompraItem extends CompraItemRow {
+  inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida' | 'cantidad' | 'ean' | 'sku' | 'numero_lote'> | null
+}
 
 // ─── Database type para createClient<Database> ──────────────────────────────
 

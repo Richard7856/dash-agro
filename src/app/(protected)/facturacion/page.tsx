@@ -316,7 +316,7 @@ export default function FacturacionPage() {
                 type="number" min="0" max="100" step="1"
                 value={form.iva_pct}
                 onChange={(e) => setForm((f) => ({ ...f, iva_pct: e.target.value }))}
-                className="w-16 text-center px-2 py-1 rounded-lg border border-blue-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="nm-input w-16 text-center px-2 py-1 min-h-[44px] text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
               />
               <span className="font-medium">{formatMxn(ivaMonto)}</span>
             </div>
@@ -448,10 +448,10 @@ export default function FacturacionPage() {
           </svg>
           <input type="text" placeholder="Buscar folio, cliente..." value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent" />
+            className="nm-input w-full pl-9 pr-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]" />
         </div>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as FacturaStatus | '')}
-          className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-300">
+          className="nm-input min-h-[44px] px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]">
           <option value="">Todos</option>
           <option value="borrador">Borrador</option>
           <option value="emitida">Emitida</option>

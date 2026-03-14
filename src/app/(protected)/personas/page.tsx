@@ -133,7 +133,7 @@ export default function PersonasPage() {
 
           <FormField label="Rol">
             <select
-              className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-gray-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
+              className="nm-input w-full min-h-[44px] px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
               value={form.rol}
               onChange={(e) => setForm((f) => ({ ...f, rol: e.target.value }))}
             >
@@ -169,7 +169,7 @@ export default function PersonasPage() {
                   placeholder="Describe las actividades que realiza en su puesto..."
                   value={form.descripcion_puesto}
                   onChange={(e) => setForm((f) => ({ ...f, descripcion_puesto: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent resize-none"
+                  className="nm-input w-full px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)] resize-none"
                 />
               </FormField>
               <FormField label="Impacto operativo">
@@ -178,7 +178,7 @@ export default function PersonasPage() {
                   placeholder="¿Cómo influye su labor en otros procesos o personas?"
                   value={form.impacto_operativo}
                   onChange={(e) => setForm((f) => ({ ...f, impacto_operativo: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent resize-none"
+                  className="nm-input w-full px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)] resize-none"
                 />
               </FormField>
               <FormField label="Estructura">
@@ -187,7 +187,7 @@ export default function PersonasPage() {
                   placeholder="Área, jerarquía y función específica dentro de la organización..."
                   value={form.estructura}
                   onChange={(e) => setForm((f) => ({ ...f, estructura: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-base bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent resize-none"
+                  className="nm-input w-full px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)] resize-none"
                 />
               </FormField>
             </div>
@@ -278,7 +278,7 @@ export default function PersonasPage() {
           placeholder="Buscar por nombre o rol..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-transparent"
+          className="nm-input w-full pl-9 pr-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
         />
       </div>
 
