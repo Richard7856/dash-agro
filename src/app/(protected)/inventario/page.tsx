@@ -47,7 +47,8 @@ function getExpiryStatus(fecha: string | null): 'expired' | 'soon' | 'ok' | null
 export default function InventarioPage() {
   const [registros, setRegistros] = useState<InventarioRegistro[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [view, setView] = useState<'list' | 'form'>('list')
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
@@ -114,7 +115,7 @@ export default function InventarioPage() {
   }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta])
 
   const loadData = useCallback(async () => {
-    setLoading(true)
+    setRefreshing(true)
     const from = (page - 1) * pageSize
     const to = from + pageSize - 1
 
@@ -134,7 +135,8 @@ export default function InventarioPage() {
     )
     setTotalCantidad((cantData ?? []).reduce((s, r) => s + ((r as { cantidad: number }).cantidad ?? 0), 0))
 
-    setLoading(false)
+    setInitialLoading(false)
+    setRefreshing(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pageSize, refreshKey, applyFilters])
 
@@ -283,7 +285,7 @@ export default function InventarioPage() {
   const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
   const hasta = Math.min(page * pageSize, totalCount)
 
-  if (loading) return <Spinner fullPage />
+  if (initialLoading) return <Spinner fullPage />
 
   // ─── FORM VIEW ───────────────────────────────────────────────────────────────
   if (view === 'form') {
@@ -503,13 +505,15 @@ export default function InventarioPage() {
               placeholder="Buscar por nombre, EAN, SKU, lote…"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+              className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
             />
-            {busqueda && (
+            {refreshing ? (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+            ) : busqueda ? (
               <button onClick={() => setBusqueda('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--nm-text-subtle)] hover:text-[var(--nm-text)]">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
-            )}
+            ) : null}
           </div>
           {/* Toggle filtros */}
           <button

@@ -32,6 +32,10 @@ export default function GastosPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [filtroCategoria, setFiltroCategoria] = useState('')
+  const [filtroDesde, setFiltroDesde] = useState('')
+  const [filtroHasta, setFiltroHasta] = useState('')
+  const [showFiltros, setShowFiltros] = useState(false)
 
   const loadData = useCallback(async () => {
     const [{ data: gastosData }, { data: personasData }] = await Promise.all([
@@ -114,15 +118,26 @@ export default function GastosPage() {
     .reduce((s, g) => s + g.monto, 0)
 
   const gastosFiltrados = useMemo(() => {
-    if (!busqueda.trim()) return gastos
-    const q = busqueda.toLowerCase()
-    return gastos.filter((g) =>
-      g.concepto.toLowerCase().includes(q) ||
-      (g.categoria ?? '').toLowerCase().includes(q) ||
-      (g.notas ?? '').toLowerCase().includes(q) ||
-      (g.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
-    )
-  }, [gastos, busqueda])
+    let result = gastos
+    if (busqueda.trim()) {
+      const q = busqueda.toLowerCase()
+      result = result.filter((g) =>
+        g.concepto.toLowerCase().includes(q) ||
+        (g.categoria ?? '').toLowerCase().includes(q) ||
+        (g.notas ?? '').toLowerCase().includes(q) ||
+        (g.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
+      )
+    }
+    if (filtroCategoria) result = result.filter((g) => g.categoria === filtroCategoria)
+    if (filtroDesde) result = result.filter((g) => g.fecha >= filtroDesde)
+    if (filtroHasta) result = result.filter((g) => g.fecha <= filtroHasta)
+    return result
+  }, [gastos, busqueda, filtroCategoria, filtroDesde, filtroHasta])
+
+  const hayFiltros = busqueda || filtroCategoria || filtroDesde || filtroHasta
+  function limpiarFiltros() {
+    setBusqueda(''); setFiltroCategoria(''); setFiltroDesde(''); setFiltroHasta('')
+  }
 
   if (loading) return <Spinner color="red" fullPage />
 
@@ -191,23 +206,75 @@ export default function GastosPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Gastos"
-        subtitle={busqueda ? `${gastosFiltrados.length} de ${gastos.length}` : `${gastos.length} registros`}
+        subtitle={hayFiltros ? `${gastosFiltrados.length} de ${gastos.length}` : `${gastos.length} registros`}
         action={{ label: 'Nuevo gasto', onClick: openNew }}
       />
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
 
-      {/* Búsqueda */}
-      <div className="relative mb-4">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-        </svg>
-        <input
-          type="text"
-          placeholder="Buscar concepto, categoría, persona..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
-        />
+      {/* Búsqueda + Filtros */}
+      <div className="mb-4 flex flex-col gap-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Buscar concepto, persona, notas..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
+            />
+          </div>
+          <button
+            onClick={() => setShowFiltros((v) => !v)}
+            className={`relative px-3 py-2 text-sm rounded-xl border font-medium transition-colors ${showFiltros ? 'bg-red-500 text-white border-red-500' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+            {(filtroCategoria || filtroDesde || filtroHasta) && (
+              <span className={`absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full text-[10px] font-bold flex items-center justify-center ${showFiltros ? 'bg-white text-red-500' : 'bg-red-500 text-white'}`}>
+                {[filtroCategoria, filtroDesde, filtroHasta].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Categorías rápidas */}
+        <div className="flex gap-1.5 flex-wrap">
+          {(['', ...CATEGORIAS] as const).map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFiltroCategoria(cat)}
+              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors capitalize ${
+                filtroCategoria === cat
+                  ? 'bg-red-500 text-white border-red-500'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-red-300'
+              }`}
+            >
+              {cat || 'Todos'}
+            </button>
+          ))}
+        </div>
+
+        {showFiltros && (
+          <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-col gap-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-[var(--nm-text-subtle)] mb-1 block">Desde</label>
+                <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white" />
+              </div>
+              <div>
+                <label className="text-xs text-[var(--nm-text-subtle)] mb-1 block">Hasta</label>
+                <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white" />
+              </div>
+            </div>
+            {hayFiltros && (
+              <button onClick={limpiarFiltros} className="self-end text-xs text-red-500 hover:underline">Limpiar filtros</button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Resumen del mes */}
@@ -219,7 +286,7 @@ export default function GastosPage() {
       )}
 
       {gastosFiltrados.length === 0 ? (
-        busqueda
+        hayFiltros
           ? <p className="text-sm text-[var(--nm-text-subtle)] py-8 text-center">Sin resultados para esta búsqueda</p>
           : <EmptyState message="No hay gastos registrados" action={{ label: 'Registrar primero', onClick: openNew }} />
       ) : (

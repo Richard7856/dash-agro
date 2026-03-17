@@ -39,6 +39,7 @@ export default function ClientesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [filtroActivo, setFiltroActivo] = useState<'' | 'activo' | 'inactivo'>('')
 
   const [detailTab, setDetailTab] = useState<'historial' | 'sugerencias'>('historial')
   const [ventas, setVentas] = useState<VentaHistorial[]>([])
@@ -55,7 +56,9 @@ export default function ClientesPage() {
 
   const filtered = clientes.filter((c) => {
     const q = search.toLowerCase()
-    return c.nombre.toLowerCase().includes(q) || (c.rfc ?? '').toLowerCase().includes(q)
+    const matchSearch = c.nombre.toLowerCase().includes(q) || (c.rfc ?? '').toLowerCase().includes(q)
+    const matchActivo = filtroActivo === '' || (filtroActivo === 'activo' ? c.activo : !c.activo)
+    return matchSearch && matchActivo
   })
 
   function openNew() {
@@ -269,13 +272,24 @@ export default function ClientesPage() {
         <Btn onClick={openNew} className="hidden md:flex">+ Nuevo cliente</Btn>
       </div>
 
-      <div className="relative mb-4">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-        </svg>
-        <input type="text" placeholder="Buscar por nombre o RFC..." value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="nm-input w-full pl-9 pr-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]" />
+      <div className="flex flex-col gap-2 mb-4">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input type="text" placeholder="Buscar por nombre o RFC..." value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="nm-input w-full pl-9 pr-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]" />
+        </div>
+        <div className="flex gap-1.5">
+          {([['', 'Todos'], ['activo', 'Activos'], ['inactivo', 'Inactivos']] as const).map(([val, label]) => (
+            <button key={val} onClick={() => setFiltroActivo(val)}
+              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${filtroActivo === val ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'}`}>
+              {label}
+            </button>
+          ))}
+          <span className="ml-auto text-xs text-[var(--nm-text-subtle)] self-center">{filtered.length} cliente{filtered.length !== 1 ? 's' : ''}</span>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
