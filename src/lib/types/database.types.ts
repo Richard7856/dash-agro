@@ -1,7 +1,7 @@
 export type FormaPago = 'efectivo' | 'bonos_gasolina' | 'mixto' | 'otro'
 export type StatusPago = 'pendiente' | 'parcial' | 'pagado'
 export type FacturaStatus = 'borrador' | 'emitida' | 'pagada' | 'cancelada'
-export type FacturaTipo = 'ingreso' | 'egreso'
+export type FacturaTipo = 'ingreso' | 'egreso' | 'nota_credito' | 'devolucion'
 export type UnidadMedida = 'unidad' | 'kg' | 'lt' | 'caja' | 'tarima' | 'pieza' | 'litro' | 'gramo'
 
 // ─── Row types (sin joins — para el generic de Supabase) ────────────────────

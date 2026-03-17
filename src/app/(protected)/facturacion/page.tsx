@@ -29,6 +29,19 @@ const emptyForm = () => ({
   notas: '',
 })
 
+const TIPO_COLORS: Record<FacturaTipo, string> = {
+  ingreso:      'bg-green-50 text-green-700',
+  egreso:       'bg-orange-50 text-orange-700',
+  nota_credito: 'bg-purple-50 text-purple-700',
+  devolucion:   'bg-amber-50 text-amber-700',
+}
+const TIPO_LABELS: Record<FacturaTipo, string> = {
+  ingreso:      'Ingreso',
+  egreso:       'Egreso',
+  nota_credito: 'Nota crédito',
+  devolucion:   'Devolución',
+}
+
 const STATUS_COLORS: Record<FacturaStatus, string> = {
   borrador:  'bg-gray-100 text-gray-600',
   emitida:   'bg-blue-50 text-blue-700',
@@ -160,8 +173,8 @@ export default function FacturacionPage() {
     const payload = {
       fecha: form.fecha,
       tipo: form.tipo,
-      cliente_id: form.tipo === 'ingreso' ? (form.cliente_id || null) : null,
-      proveedor_id: form.tipo === 'egreso' ? (form.proveedor_id || null) : null,
+      cliente_id: (form.tipo === 'ingreso' || form.tipo === 'nota_credito' || form.tipo === 'devolucion') ? (form.cliente_id || null) : null,
+      proveedor_id: (form.tipo === 'egreso' || form.tipo === 'devolucion') ? (form.proveedor_id || null) : null,
       subtotal: subtotalCalc,
       iva: ivaMonto,
       total: totalCalc,
@@ -222,7 +235,7 @@ export default function FacturacionPage() {
   // ─── Form ────────────────────────────────────────────────────────────────
   if (view === 'form') return (
     <div className="max-w-2xl mx-auto px-4 py-5">
-      <FormHeader title={editId ? 'Editar factura' : 'Nueva factura'} onBack={() => setView('list')} />
+      <FormHeader title={editId ? 'Editar remisión' : 'Nueva remisión'} onBack={() => setView('list')} />
       <form onSubmit={handleSave} className="flex flex-col gap-4">
         {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
@@ -232,26 +245,46 @@ export default function FacturacionPage() {
           </FormField>
           <FormField label="Tipo">
             <Select value={form.tipo} onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as FacturaTipo, cliente_id: '', proveedor_id: '' }))}>
-              <option value="ingreso">Ingreso (venta)</option>
-              <option value="egreso">Egreso (compra)</option>
+              <option value="ingreso">Ingreso (venta / salida)</option>
+              <option value="egreso">Egreso (compra / entrada)</option>
+              <option value="nota_credito">Nota de crédito</option>
+              <option value="devolucion">Devolución</option>
             </Select>
           </FormField>
         </div>
 
-        {form.tipo === 'ingreso' ? (
+        {/* ingreso y nota_credito → cliente; egreso → proveedor; devolucion → ambos opcionales */}
+        {(form.tipo === 'ingreso' || form.tipo === 'nota_credito') && (
           <FormField label="Cliente">
             <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
               <option value="">— Sin cliente —</option>
               {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </Select>
           </FormField>
-        ) : (
+        )}
+        {form.tipo === 'egreso' && (
           <FormField label="Proveedor">
             <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
               <option value="">— Sin proveedor —</option>
               {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </Select>
           </FormField>
+        )}
+        {form.tipo === 'devolucion' && (
+          <>
+            <FormField label="Cliente (si aplica)">
+              <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
+                <option value="">— Sin cliente —</option>
+                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </Select>
+            </FormField>
+            <FormField label="Proveedor (si aplica)">
+              <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
+                <option value="">— Sin proveedor —</option>
+                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </Select>
+            </FormField>
+          </>
         )}
 
         {/* Partidas */}
@@ -355,10 +388,10 @@ export default function FacturacionPage() {
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-[var(--nm-text)]">{f.numero_factura ?? 'Factura'}</h1>
+              <h1 className="text-xl font-bold text-[var(--nm-text)]">{f.numero_factura ?? 'Remisión'}</h1>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[f.status]}`}>{STATUS_LABELS[f.status]}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${f.tipo === 'ingreso' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
-                {f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
+              <span className={`text-xs px-2 py-0.5 rounded-full ${TIPO_COLORS[f.tipo]}`}>
+                {TIPO_LABELS[f.tipo]}
               </span>
             </div>
             <p className="text-xs text-[var(--nm-text-subtle)] mt-0.5">{partName} · {formatDate(f.fecha)}</p>
@@ -372,7 +405,7 @@ export default function FacturacionPage() {
             {f.status === 'borrador' && (
               <button onClick={() => changeStatus(f.id, 'emitida')}
                 className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg">
-                Emitir factura
+                Emitir remisión
               </button>
             )}
             {(f.status === 'borrador' || f.status === 'emitida') && (
@@ -434,9 +467,9 @@ export default function FacturacionPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
-        title="Facturación"
-        subtitle={`${filtered.length} factura${filtered.length !== 1 ? 's' : ''}`}
-        action={{ label: 'Nueva factura', onClick: openNew }}
+        title="Remisiones"
+        subtitle={`${filtered.length} remisión${filtered.length !== 1 ? 'es' : ''}`}
+        action={{ label: 'Nueva remisión', onClick: openNew }}
       />
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
 
@@ -446,7 +479,7 @@ export default function FacturacionPage() {
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
           </svg>
-          <input type="text" placeholder="Buscar folio, cliente..." value={search}
+          <input type="text" placeholder="Buscar folio, cliente, proveedor..." value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="nm-input w-full pl-9 pr-3 py-2.5 text-sm text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]" />
         </div>
@@ -461,7 +494,7 @@ export default function FacturacionPage() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState message="No hay facturas registradas" action={{ label: 'Crear primera', onClick: openNew }} />
+        <EmptyState message="No hay remisiones registradas" action={{ label: 'Crear primera', onClick: openNew }} />
       ) : (
         <div className="flex flex-col gap-2">
           {filtered.map((f) => {
@@ -512,7 +545,7 @@ export default function FacturacionPage() {
 
       <button onClick={openNew}
         className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
-        aria-label="Nueva factura">+
+        aria-label="Nueva remisión">+
       </button>
     </div>
   )
