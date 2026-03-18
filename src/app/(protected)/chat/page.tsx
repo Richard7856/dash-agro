@@ -265,7 +265,7 @@ export default function ChatPage() {
             <div
               className={`max-w-[80%] px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
-                  ? 'nm-card-green text-green-900 rounded-[var(--nm-radius)] rounded-tr-sm'
+                  ? 'nm-card-green text-blue-900 rounded-[var(--nm-radius)] rounded-tr-sm'
                   : 'nm-card-sm text-[var(--nm-text)] rounded-[var(--nm-radius-sm)] rounded-tl-none'
               }`}
             >
@@ -287,19 +287,19 @@ export default function ChatPage() {
         {/* Loading / transcribing indicator */}
         {(loading || transcribing) && (
           <div className="flex justify-start">
-            <div className="w-7 h-7 rounded-full bg-green-100 flex items-center justify-center text-sm mr-2 mt-1 shrink-0">🌿</div>
+            <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-sm mr-2 mt-1 shrink-0">🌿</div>
             <div className="nm-card-sm rounded-[var(--nm-radius-sm)] rounded-tl-none px-4 py-3">
               <div className="flex items-center gap-1.5">
                 {transcribing ? (
                   <>
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                     <span className="text-xs text-[var(--nm-text-muted)]">Transcribiendo audio...</span>
                   </>
                 ) : (
                   <>
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </>
                 )}
               </div>

@@ -10,6 +10,7 @@ import { FormHeader } from '@/components/ui/FormHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { Factura, FacturaPartida, FacturaTipo, FacturaStatus, Cliente, Proveedor } from '@/lib/types/database.types'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 
 interface PartidaForm {
   id?: string
@@ -30,7 +31,7 @@ const emptyForm = () => ({
 })
 
 const TIPO_COLORS: Record<FacturaTipo, string> = {
-  ingreso:      'bg-green-50 text-green-700',
+  ingreso:      'bg-blue-50 text-blue-700',
   egreso:       'bg-orange-50 text-orange-700',
   nota_credito: 'bg-purple-50 text-purple-700',
   devolucion:   'bg-amber-50 text-amber-700',
@@ -45,7 +46,7 @@ const TIPO_LABELS: Record<FacturaTipo, string> = {
 const STATUS_COLORS: Record<FacturaStatus, string> = {
   borrador:  'bg-gray-100 text-gray-600',
   emitida:   'bg-blue-50 text-blue-700',
-  pagada:    'bg-green-50 text-green-700',
+  pagada:    'bg-blue-50 text-blue-700',
   cancelada: 'bg-red-50 text-red-600',
 }
 
@@ -230,6 +231,63 @@ export default function FacturacionPage() {
 
   const selected = selectedId ? facturas.find((f) => f.id === selectedId) : null
 
+  function exportPDF(f: Factura, partidas: FacturaPartida[]) {
+    const partName = (f.clientes as { nombre: string } | null)?.nombre
+      ?? (f.proveedores as { nombre: string } | null)?.nombre ?? '—'
+    const rows = partidas.map((p) =>
+      `<tr><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${p.descripcion}</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:center">${p.cantidad}</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">$${Number(p.precio_unitario).toFixed(2)}</td><td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right">$${Number(p.total).toFixed(2)}</td></tr>`
+    ).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${f.numero_factura ?? 'Remision'}</title>
+    <style>body{font-family:Arial,sans-serif;font-size:13px;color:#111;padding:32px}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#f3f4f6;padding:6px 8px;text-align:left;font-size:12px}td{vertical-align:top}.total-row td{font-weight:bold;border-top:2px solid #111;padding-top:8px}@media print{body{padding:0}button{display:none}}</style>
+    </head><body>
+    <h1>${f.numero_factura ?? 'Remisión'}</h1>
+    <p style="color:#6b7280;margin:0 0 12px">${TIPO_LABELS[f.tipo]} · ${STATUS_LABELS[f.status]} · ${new Date(f.fecha + 'T00:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}</p>
+    ${partName !== '—' ? `<p style="margin:0 0 4px"><strong>${f.tipo === 'egreso' ? 'Proveedor' : 'Cliente'}:</strong> ${partName}</p>` : ''}
+    ${f.notas ? `<p style="margin:0 0 12px;color:#6b7280"><em>${f.notas}</em></p>` : ''}
+    <table><thead><tr><th>Descripción</th><th style="text-align:center">Cant.</th><th style="text-align:right">P. Unit.</th><th style="text-align:right">Total</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="total-row"><td colspan="3" style="text-align:right;padding:8px">Subtotal</td><td style="text-align:right;padding:8px">$${Number(f.subtotal).toFixed(2)}</td></tr>
+    ${f.iva > 0 ? `<tr><td colspan="3" style="text-align:right;padding:4px 8px">IVA</td><td style="text-align:right;padding:4px 8px">$${Number(f.iva).toFixed(2)}</td></tr>` : ''}
+    <tr><td colspan="3" style="text-align:right;padding:8px;font-size:15px"><strong>Total</strong></td><td style="text-align:right;padding:8px;font-size:15px"><strong>$${Number(f.total).toFixed(2)}</strong></td></tr>
+    </tfoot></table>
+    <script>window.onload=()=>{window.print();setTimeout(()=>window.close(),500)}</script>
+    </body></html>`
+    const win = window.open('', '_blank')
+    if (win) { win.document.write(html); win.document.close() }
+  }
+
+  function exportXML(f: Factura, partidas: FacturaPartida[]) {
+    const partName = (f.clientes as { nombre: string } | null)?.nombre
+      ?? (f.proveedores as { nombre: string } | null)?.nombre ?? ''
+    const escape = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    const conceptos = partidas.map((p) =>
+      `    <Concepto descripcion="${escape(p.descripcion)}" cantidad="${p.cantidad}" valorUnitario="${Number(p.precio_unitario).toFixed(2)}" importe="${Number(p.total).toFixed(2)}"/>`
+    ).join('\n')
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<Remision xmlns="urn:agrodelicias:remision:1.0"
+  folio="${escape(f.numero_factura ?? '')}"
+  fecha="${f.fecha}"
+  tipo="${f.tipo}"
+  status="${f.status}"
+  ${f.tipo !== 'egreso' && partName ? `cliente="${escape(partName)}"` : ''}
+  ${f.tipo === 'egreso' && partName ? `proveedor="${escape(partName)}"` : ''}
+  subTotal="${Number(f.subtotal).toFixed(2)}"
+  iva="${Number(f.iva).toFixed(2)}"
+  total="${Number(f.total).toFixed(2)}">
+  <Conceptos>
+${conceptos}
+  </Conceptos>
+  ${f.notas ? `<Notas>${escape(f.notas)}</Notas>` : ''}
+</Remision>`
+    const blob = new Blob([xml], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${f.numero_factura ?? 'remision'}.xml`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   if (loading) return <Spinner fullPage />
 
   // ─── Form ────────────────────────────────────────────────────────────────
@@ -256,33 +314,45 @@ export default function FacturacionPage() {
         {/* ingreso y nota_credito → cliente; egreso → proveedor; devolucion → ambos opcionales */}
         {(form.tipo === 'ingreso' || form.tipo === 'nota_credito') && (
           <FormField label="Cliente">
-            <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-              <option value="">— Sin cliente —</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </Select>
+            <SearchSelect
+              options={clientes.map((c) => ({ id: c.id, label: c.nombre }))}
+              value={form.cliente_id}
+              onChange={(id) => setForm((f) => ({ ...f, cliente_id: id }))}
+              placeholder="Buscar cliente…"
+              emptyLabel="— Sin cliente —"
+            />
           </FormField>
         )}
         {form.tipo === 'egreso' && (
           <FormField label="Proveedor">
-            <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
-              <option value="">— Sin proveedor —</option>
-              {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </Select>
+            <SearchSelect
+              options={proveedores.map((p) => ({ id: p.id, label: p.nombre }))}
+              value={form.proveedor_id}
+              onChange={(id) => setForm((f) => ({ ...f, proveedor_id: id }))}
+              placeholder="Buscar proveedor…"
+              emptyLabel="— Sin proveedor —"
+            />
           </FormField>
         )}
         {form.tipo === 'devolucion' && (
           <>
             <FormField label="Cliente (si aplica)">
-              <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-                <option value="">— Sin cliente —</option>
-                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </Select>
+              <SearchSelect
+                options={clientes.map((c) => ({ id: c.id, label: c.nombre }))}
+                value={form.cliente_id}
+                onChange={(id) => setForm((f) => ({ ...f, cliente_id: id }))}
+                placeholder="Buscar cliente…"
+                emptyLabel="— Sin cliente —"
+              />
             </FormField>
             <FormField label="Proveedor (si aplica)">
-              <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
-                <option value="">— Sin proveedor —</option>
-                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Select>
+              <SearchSelect
+                options={proveedores.map((p) => ({ id: p.id, label: p.nombre }))}
+                value={form.proveedor_id}
+                onChange={(id) => setForm((f) => ({ ...f, proveedor_id: id }))}
+                placeholder="Buscar proveedor…"
+                emptyLabel="— Sin proveedor —"
+              />
             </FormField>
           </>
         )}
@@ -291,7 +361,7 @@ export default function FacturacionPage() {
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-semibold text-gray-700">Partidas</p>
-            <button type="button" onClick={addPartida} className="text-xs text-green-600 hover:underline">+ Agregar línea</button>
+            <button type="button" onClick={addPartida} className="text-xs text-blue-600 hover:underline">+ Agregar línea</button>
           </div>
           <div className="flex flex-col gap-2">
             {partidas.map((p, i) => (
@@ -393,6 +463,11 @@ export default function FacturacionPage() {
               <span className={`text-xs px-2 py-0.5 rounded-full ${TIPO_COLORS[f.tipo]}`}>
                 {TIPO_LABELS[f.tipo]}
               </span>
+              {f.venta_id && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  Desde venta
+                </span>
+              )}
             </div>
             <p className="text-xs text-[var(--nm-text-subtle)] mt-0.5">{partName} · {formatDate(f.fecha)}</p>
           </div>
@@ -410,7 +485,7 @@ export default function FacturacionPage() {
             )}
             {(f.status === 'borrador' || f.status === 'emitida') && (
               <button onClick={() => changeStatus(f.id, 'pagada')}
-                className="px-3 py-1.5 text-xs font-medium bg-green-50 text-green-700 hover:bg-green-100 rounded-lg">
+                className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg">
                 Marcar pagada
               </button>
             )}
@@ -420,6 +495,31 @@ export default function FacturacionPage() {
             </button>
           </div>
         )}
+
+        {/* Export buttons */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => exportPDF(f, detail?.facturas_partidas ?? [])}
+            disabled={loadingDetail}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg disabled:opacity-50 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6M9 17h4" />
+            </svg>
+            PDF
+          </button>
+          <button
+            onClick={() => exportXML(f, detail?.facturas_partidas ?? [])}
+            disabled={loadingDetail}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg disabled:opacity-50 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+            XML
+          </button>
+        </div>
 
         {/* Partidas */}
         {loadingDetail ? <Spinner size="sm" /> : (
@@ -508,7 +608,7 @@ export default function FacturacionPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-[var(--nm-text)]">{f.numero_factura ?? 'Sin folio'}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[f.status]}`}>{STATUS_LABELS[f.status]}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${f.tipo === 'ingreso' ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-700'}`}>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${f.tipo === 'ingreso' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
                           {f.tipo === 'ingreso' ? 'Ingreso' : 'Egreso'}
                         </span>
                       </div>
@@ -523,7 +623,7 @@ export default function FacturacionPage() {
                 <div className="flex border-t border-[var(--nm-bg-inset)]">
                   <button onClick={() => openDetail(f)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Ver detalle</button>
                   <div className="w-px bg-gray-100" />
-                  <button onClick={() => openEdit(f)} className="flex-1 py-2 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors">Editar</button>
+                  <button onClick={() => openEdit(f)} className="flex-1 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition-colors">Editar</button>
                   {f.status === 'borrador' && (
                     <>
                       <div className="w-px bg-gray-100" />
@@ -533,7 +633,7 @@ export default function FacturacionPage() {
                   {(f.status === 'borrador' || f.status === 'emitida') && (
                     <>
                       <div className="w-px bg-gray-100" />
-                      <button onClick={() => changeStatus(f.id, 'pagada')} className="flex-1 py-2 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors">Pagada</button>
+                      <button onClick={() => changeStatus(f.id, 'pagada')} className="flex-1 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition-colors">Pagada</button>
                     </>
                   )}
                 </div>
@@ -544,7 +644,7 @@ export default function FacturacionPage() {
       )}
 
       <button onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
+        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
         aria-label="Nueva remisión">+
       </button>
     </div>

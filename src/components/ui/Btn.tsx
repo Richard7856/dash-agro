@@ -24,8 +24,8 @@ export function Btn({
   }
 
   const variants = {
-    primary:   'nm-btn-primary text-white focus:ring-green-500',
-    secondary: 'nm-btn text-[var(--nm-text)] focus:ring-green-300',
+    primary:   'nm-btn-primary text-white focus:ring-blue-500',
+    secondary: 'nm-btn text-[var(--nm-text)] focus:ring-blue-300',
     danger:    'bg-red-600 text-white rounded-[var(--nm-radius-sm)] hover:bg-red-700 focus:ring-red-400 shadow-md active:scale-95 active:shadow-sm border border-red-700',
     ghost:     'text-[var(--nm-text-muted)] hover:bg-black/5 rounded-[var(--nm-radius-sm)] focus:ring-[var(--nm-text-subtle)]',
   }

@@ -12,6 +12,7 @@ import { FormHeader } from '@/components/ui/FormHeader'
 import { FORMAS_PAGO } from '@/lib/constants'
 import type { Compra, Persona, Proveedor, Ubicacion, FormaPago, StatusPago, InventarioRegistro, UnidadMedida } from '@/lib/types/database.types'
 import { FotoUploader } from '@/components/ui/FotoUploader'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 
 // Item local (en el formulario, antes de guardar)
 interface CompraItemLocal {
@@ -19,6 +20,7 @@ interface CompraItemLocal {
   nombre: string
   unidad: UnidadMedida
   stock_actual: number
+  precio_compra_actual: number
   lote: string | null
   cantidad: string
   precio_unitario: string
@@ -31,6 +33,9 @@ const emptyForm = () => ({
   ubicacion_id: '',
   proveedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
+  monto_efectivo: '',
+  monto_bonos: '',
+  monto_otro: '',
   gastos: '',
   notas: '',
   status_pago: 'pagado' as StatusPago,
@@ -155,6 +160,9 @@ export default function ComprasPage() {
       ubicacion_id: c.ubicacion_id ?? '',
       proveedor_id: c.proveedor_id ?? '',
       forma_pago: c.forma_pago,
+      monto_efectivo: c.monto_efectivo ? String(c.monto_efectivo) : '',
+      monto_bonos: c.monto_bonos ? String(c.monto_bonos) : '',
+      monto_otro: c.monto_otro ? String(c.monto_otro) : '',
       gastos: c.gastos != null ? String(c.gastos) : '',
       notas: c.notas ?? '',
       status_pago: c.status_pago,
@@ -164,7 +172,7 @@ export default function ComprasPage() {
     // Cargar items existentes
     const { data: existingItems } = await supabase
       .from('compras_items')
-      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, ean, sku, numero_lote)')
+      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, precio_compra_unitario, ean, sku, numero_lote)')
       .eq('compra_id', c.id)
 
     const loaded: CompraItemLocal[] = (existingItems ?? []).map((it: any) => ({
@@ -172,6 +180,7 @@ export default function ComprasPage() {
       nombre: it.inventario_registros?.nombre_producto ?? '',
       unidad: it.inventario_registros?.unidad_medida ?? 'unidad',
       stock_actual: (it.inventario_registros?.cantidad ?? 0),
+      precio_compra_actual: it.inventario_registros?.precio_compra_unitario ?? 0,
       lote: it.inventario_registros?.numero_lote ?? null,
       cantidad: String(it.cantidad),
       precio_unitario: String(it.precio_unitario),
@@ -192,6 +201,7 @@ export default function ComprasPage() {
       nombre: p.nombre_producto,
       unidad: p.unidad_medida,
       stock_actual: p.cantidad,
+      precio_compra_actual: p.precio_compra_unitario,
       lote: p.numero_lote ?? null,
       cantidad: '1',
       precio_unitario: String(p.precio_compra_unitario || ''),
@@ -248,6 +258,9 @@ export default function ComprasPage() {
       proveedor_id: form.proveedor_id || null,
       forma_pago: form.forma_pago,
       monto_total: montoFinal,
+      monto_efectivo: form.forma_pago === 'mixto' ? (parseFloat(form.monto_efectivo) || 0) : 0,
+      monto_bonos: form.forma_pago === 'mixto' ? (parseFloat(form.monto_bonos) || 0) : 0,
+      monto_otro: form.forma_pago === 'mixto' ? (parseFloat(form.monto_otro) || 0) : 0,
       gastos: form.gastos ? parseFloat(form.gastos) : 0,
       notas: form.notas || null,
       status_pago: form.status_pago,
@@ -359,7 +372,7 @@ export default function ComprasPage() {
                 placeholder="Buscar producto por nombre, EAN, SKU…"
                 value={busquedaProducto}
                 onChange={(e) => setBusquedaProducto(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
               />
             </div>
 
@@ -397,7 +410,7 @@ export default function ComprasPage() {
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-[var(--nm-text)] truncate">{item.nombre}</p>
                           {item.lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {item.lote}</p>}
-                          <p className="text-xs text-blue-600">Stock actual: {item.stock_actual} {item.unidad}</p>
+                          <p className="text-xs text-gray-400">Stock: {item.stock_actual} {item.unidad} · Costo actual: {formatMxn(item.precio_compra_actual)}</p>
                         </div>
                         <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0 mt-0.5">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -461,19 +474,63 @@ export default function ComprasPage() {
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </Select>
             </FormField>
-            <FormField label="Proveedor">
-              <Select value={form.proveedor_id} onChange={(e) => setForm((f) => ({ ...f, proveedor_id: e.target.value }))}>
-                <option value="">— Ninguno —</option>
-                {proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Select>
-            </FormField>
           </div>
 
+          {form.forma_pago === 'mixto' && (
+            <div className="border border-gray-200 rounded-xl p-3 bg-gray-50 flex flex-col gap-2">
+              <p className="text-xs font-semibold text-[var(--nm-text-muted)]">Desglose de pago</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 mb-0.5 block">Efectivo</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="$0"
+                    value={form.monto_efectivo}
+                    onChange={(e) => setForm((f) => ({ ...f, monto_efectivo: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-0.5 block">Bonos</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="$0"
+                    value={form.monto_bonos}
+                    onChange={(e) => setForm((f) => ({ ...f, monto_bonos: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-0.5 block">Otro</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="$0"
+                    value={form.monto_otro}
+                    onChange={(e) => setForm((f) => ({ ...f, monto_otro: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-right text-gray-500">
+                Suma: {formatMxn((parseFloat(form.monto_efectivo) || 0) + (parseFloat(form.monto_bonos) || 0) + (parseFloat(form.monto_otro) || 0))}
+              </p>
+            </div>
+          )}
+
+          <FormField label="Proveedor">
+            <SearchSelect
+              options={proveedores.map((p) => ({ id: p.id, label: p.nombre }))}
+              value={form.proveedor_id}
+              onChange={(id) => setForm((f) => ({ ...f, proveedor_id: id }))}
+              placeholder="Buscar proveedor…"
+            />
+          </FormField>
+
           <FormField label="Ubicación">
-            <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value }))}>
-              <option value="">— Ninguna —</option>
-              {ubicaciones.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-            </Select>
+            <SearchSelect
+              options={ubicaciones.map((u) => ({ id: u.id, label: u.nombre }))}
+              value={form.ubicacion_id}
+              onChange={(id) => setForm((f) => ({ ...f, ubicacion_id: id }))}
+              placeholder="Buscar ubicación…"
+              emptyLabel="— Ninguna —"
+            />
           </FormField>
 
           <FormField label="Notas">
@@ -531,12 +588,12 @@ export default function ComprasPage() {
               placeholder="Buscar folio, descripción, persona..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
           <button
             onClick={() => setShowFiltros((v) => !v)}
-            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFiltros || (filtroDesde || filtroHasta || filtroPago) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFiltros || (filtroDesde || filtroHasta || filtroPago) ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
           >
             Filtros {(filtroDesde || filtroHasta || filtroPago) ? '●' : ''}
           </button>
@@ -548,18 +605,18 @@ export default function ComprasPage() {
               <div>
                 <label className="text-xs text-[var(--nm-text-muted)] mb-1 block">Desde</label>
                 <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
               </div>
               <div>
                 <label className="text-xs text-[var(--nm-text-muted)] mb-1 block">Hasta</label>
                 <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
               </div>
             </div>
             <div>
               <label className="text-xs text-[var(--nm-text-muted)] mb-1 block">Forma de pago</label>
               <select value={filtroPago} onChange={(e) => setFiltroPago(e.target.value)}
-                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                 <option value="">Todas</option>
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </select>
@@ -644,7 +701,7 @@ export default function ComprasPage() {
 
       <button
         onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
+        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
         aria-label="Nueva compra"
       >
         +

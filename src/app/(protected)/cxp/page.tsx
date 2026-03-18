@@ -18,6 +18,10 @@ export default function CxpPage() {
   const [error, setError] = useState('')
   const [marking, setMarking] = useState<string | null>(null)
 
+  // Pago parcial modal
+  const [pagoId, setPagoId] = useState<string | null>(null)
+  const [montoPago, setMontoPago] = useState('')
+
   const loadData = useCallback(async () => {
     const { data } = await supabase
       .from('compras')
@@ -33,17 +37,41 @@ export default function CxpPage() {
 
   async function marcarPagada(id: string) {
     setMarking(id)
+    const compra = compras.find((c) => c.id === id)
     const { error: err } = await supabase
       .from('compras')
-      .update({ status_pago: 'pagado' })
+      .update({ status_pago: 'pagado', monto_pagado: compra?.monto_total ?? 0 })
       .eq('id', id)
     if (err) { setError(`Error: ${err.message}`); setMarking(null); return }
     setCompras((cs) => cs.filter((c) => c.id !== id))
     setMarking(null)
   }
 
+  async function registrarPagoParcial(id: string) {
+    const monto = parseFloat(montoPago)
+    if (isNaN(monto) || monto <= 0) { setError('Ingresa un monto válido'); return }
+    setMarking(id)
+    const compra = compras.find((c) => c.id === id)!
+    const nuevoMontoPagado = (compra.monto_pagado ?? 0) + monto
+    const nuevoStatus = nuevoMontoPagado >= compra.monto_total ? 'pagado' : 'parcial'
+    const { error: err } = await supabase
+      .from('compras')
+      .update({ monto_pagado: nuevoMontoPagado, status_pago: nuevoStatus })
+      .eq('id', id)
+    if (err) { setError(`Error: ${err.message}`); setMarking(null); return }
+    if (nuevoStatus === 'pagado') {
+      setCompras((cs) => cs.filter((c) => c.id !== id))
+    } else {
+      setCompras((cs) => cs.map((c) => c.id === id ? { ...c, monto_pagado: nuevoMontoPagado, status_pago: nuevoStatus } : c))
+    }
+    setPagoId(null)
+    setMontoPago('')
+    setMarking(null)
+  }
+
   const resumen = useMemo(() => {
     const total = compras.reduce((s, c) => s + c.monto_total, 0)
+    const pagado = compras.reduce((s, c) => s + (c.monto_pagado ?? 0), 0)
     let hasta30 = 0, hasta60 = 0, mas60 = 0
     compras.forEach((c) => {
       const dias = diasVencimiento(c.fecha_vencimiento, c.fecha)
@@ -51,7 +79,7 @@ export default function CxpPage() {
       else if (dias <= 60) hasta60++
       else mas60++
     })
-    return { total, hasta30, hasta60, mas60 }
+    return { total, pagado, saldo: total - pagado, hasta30, hasta60, mas60 }
   }, [compras])
 
   if (loading) return <Spinner fullPage />
@@ -71,12 +99,17 @@ export default function CxpPage() {
       {compras.length > 0 && (
         <div className="flex flex-col gap-2 mb-4">
           <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 flex items-center justify-between">
-            <p className="text-sm text-orange-700 font-medium">Total por pagar</p>
-            <p className="text-base font-bold text-orange-700">{formatMxn(resumen.total)}</p>
+            <div>
+              <p className="text-sm text-orange-700 font-medium">Saldo por pagar</p>
+              {resumen.pagado > 0 && (
+                <p className="text-xs text-orange-600 mt-0.5">Pagado: {formatMxn(resumen.pagado)} de {formatMxn(resumen.total)}</p>
+              )}
+            </div>
+            <p className="text-base font-bold text-orange-700">{formatMxn(resumen.saldo)}</p>
           </div>
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white border border-gray-200 rounded-xl p-2.5 text-center">
-              <p className="text-lg font-bold text-green-600">{resumen.hasta30}</p>
+              <p className="text-lg font-bold text-blue-600">{resumen.hasta30}</p>
               <p className="text-[11px] text-gray-500 mt-0.5">≤ 30 días</p>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-2.5 text-center">
@@ -91,6 +124,60 @@ export default function CxpPage() {
         </div>
       )}
 
+      {/* Modal pago parcial */}
+      {pagoId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl">
+            {(() => {
+              const c = compras.find((x) => x.id === pagoId)!
+              const pendiente = c.monto_total - (c.monto_pagado ?? 0)
+              return (
+                <>
+                  <h2 className="text-base font-bold text-[var(--nm-text)] mb-1">Registrar pago</h2>
+                  <p className="text-sm text-[var(--nm-text-muted)] mb-3">
+                    {c.numero_compra ?? 'Compra'} · Pendiente: {formatMxn(pendiente)}
+                  </p>
+                  {/* Barra de progreso */}
+                  <div className="w-full bg-gray-100 rounded-full h-2 mb-3">
+                    <div
+                      className="bg-orange-500 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((c.monto_pagado ?? 0) / c.monto_total) * 100)}%` }}
+                    />
+                  </div>
+                  {error && <p className="text-xs text-red-600 mb-2">{error}</p>}
+                  <label className="text-xs text-[var(--nm-text-muted)] block mb-1">Monto pagado (MXN)</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder={`Máx ${formatMxn(pendiente)}`}
+                    value={montoPago}
+                    onChange={(e) => setMontoPago(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 mb-4"
+                    autoFocus
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setPagoId(null); setMontoPago(''); setError('') }}
+                      className="flex-1 py-2 text-sm font-medium border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => registrarPagoParcial(pagoId)}
+                      disabled={marking === pagoId}
+                      className="flex-1 py-2 text-sm font-medium bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50"
+                    >
+                      {marking === pagoId ? 'Guardando...' : 'Registrar'}
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        </div>
+      )}
+
       {compras.length === 0 ? (
         <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">
           No hay compras pendientes de pago.
@@ -101,6 +188,9 @@ export default function CxpPage() {
             const dias = diasVencimiento(c.fecha_vencimiento, c.fecha)
             const vencida = c.fecha_vencimiento ? dias > 0 : false
             const proveedorNombre = (c.proveedores as { nombre: string } | null)?.nombre
+            const montoPagado = c.monto_pagado ?? 0
+            const pendiente = c.monto_total - montoPagado
+            const pct = c.monto_total > 0 ? (montoPagado / c.monto_total) * 100 : 0
             return (
               <div key={c.id} className="nm-card overflow-hidden">
                 <div className="p-4">
@@ -126,17 +216,36 @@ export default function CxpPage() {
                         <span>Fecha: {formatDate(c.fecha)}</span>
                         {c.fecha_vencimiento && <span>Vence: {formatDate(c.fecha_vencimiento)}</span>}
                       </div>
+                      {/* Barra de progreso de pago */}
+                      {montoPagado > 0 && (
+                        <div className="mt-2">
+                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                            <div className="bg-orange-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
+                          </div>
+                          <p className="text-[11px] text-orange-700 mt-0.5">
+                            Pagado {formatMxn(montoPagado)} · Pendiente {formatMxn(pendiente)}
+                          </p>
+                        </div>
+                      )}
                     </div>
                     <p className="text-base font-bold text-[var(--nm-text)] shrink-0">{formatMxn(c.monto_total)}</p>
                   </div>
                 </div>
                 <div className="flex border-t border-[var(--nm-bg-inset)]">
                   <button
+                    onClick={() => { setPagoId(c.id); setMontoPago(''); setError('') }}
+                    disabled={marking === c.id}
+                    className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                  >
+                    Pago parcial
+                  </button>
+                  <div className="w-px bg-gray-100" />
+                  <button
                     onClick={() => marcarPagada(c.id)}
                     disabled={marking === c.id}
-                    className="flex-1 py-2 text-xs font-medium text-green-700 hover:bg-green-50 transition-colors disabled:opacity-50"
+                    className="flex-1 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50"
                   >
-                    {marking === c.id ? 'Guardando...' : 'Marcar como pagada'}
+                    {marking === c.id ? 'Guardando...' : 'Pagado total'}
                   </button>
                 </div>
               </div>

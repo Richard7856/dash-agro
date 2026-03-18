@@ -24,6 +24,7 @@ const emptyForm = () => ({
   sku: generateSKU(),
   nombre_producto: '',
   cantidad: '',
+  stock_minimo: '',
   precio_compra_unitario: '',
   unidad_medida: 'unidad' as UnidadMedida,
   cantidad_por_caja: '',
@@ -168,6 +169,7 @@ export default function InventarioPage() {
       sku: r.sku ?? '',
       nombre_producto: r.nombre_producto,
       cantidad: String(r.cantidad),
+      stock_minimo: r.stock_minimo > 0 ? String(r.stock_minimo) : '',
       precio_compra_unitario: String(r.precio_compra_unitario),
       unidad_medida: r.unidad_medida,
       cantidad_por_caja: r.cantidad_por_caja != null ? String(r.cantidad_por_caja) : '',
@@ -206,6 +208,7 @@ export default function InventarioPage() {
       sku: form.sku || generateSKU(),
       nombre_producto: form.nombre_producto,
       cantidad,
+      stock_minimo: form.stock_minimo ? parseFloat(form.stock_minimo) : 0,
       precio_compra_unitario,
       precio_compra_total,
       unidad_medida: form.unidad_medida,
@@ -354,6 +357,14 @@ export default function InventarioPage() {
             </FormField>
           </div>
 
+          <FormField label="Stock mínimo (alerta)">
+            <Input
+              type="number" min="0" step="0.001" placeholder="Opcional — ej. 10"
+              value={form.stock_minimo}
+              onChange={(e) => setForm((f) => ({ ...f, stock_minimo: e.target.value }))}
+            />
+          </FormField>
+
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Precio unitario" required>
               <Input
@@ -451,7 +462,7 @@ export default function InventarioPage() {
                         <button
                           type="button"
                           onClick={() => openEdit(r)}
-                          className="shrink-0 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200"
+                          className="shrink-0 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200"
                         >
                           Editar
                         </button>
@@ -505,10 +516,10 @@ export default function InventarioPage() {
               placeholder="Buscar por nombre, EAN, SKU, lote…"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+              className="w-full pl-9 pr-8 py-2 text-sm bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
             />
             {refreshing ? (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             ) : busqueda ? (
               <button onClick={() => setBusqueda('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--nm-text-subtle)] hover:text-[var(--nm-text)]">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -518,12 +529,12 @@ export default function InventarioPage() {
           {/* Toggle filtros */}
           <button
             onClick={() => setShowFiltros((v) => !v)}
-            className={`relative flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors ${showFiltros ? 'bg-green-600 text-white border-green-600' : 'bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-green-400'}`}
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors ${showFiltros ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-blue-400'}`}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
             Filtros
             {filtrosActivos > 0 && (
-              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1 ${showFiltros ? 'bg-white text-green-600' : 'bg-green-600 text-white'}`}>
+              <span className={`absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full text-[10px] font-bold flex items-center justify-center px-1 ${showFiltros ? 'bg-white text-blue-600' : 'bg-blue-600 text-white'}`}>
                 {filtrosActivos}
               </span>
             )}
@@ -551,7 +562,7 @@ export default function InventarioPage() {
                       filtroVencimiento === value
                         ? value === 'caducado' ? 'bg-red-600 text-white border-red-600'
                           : value === 'pronto' ? 'bg-amber-500 text-white border-amber-500'
-                          : value === 'vigente' ? 'bg-green-600 text-white border-green-600'
+                          : value === 'vigente' ? 'bg-blue-600 text-white border-blue-600'
                           : 'bg-gray-700 text-white border-gray-700'
                         : 'bg-gray-50 text-[var(--nm-text-muted)] border-gray-200 hover:border-gray-400'
                     }`}
@@ -572,7 +583,7 @@ export default function InventarioPage() {
                     type="date"
                     value={filtroDesde}
                     onChange={(e) => setFiltroDesde(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)]"
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 text-[var(--nm-text)]"
                   />
                 </div>
                 <div>
@@ -581,7 +592,7 @@ export default function InventarioPage() {
                     type="date"
                     value={filtroHasta}
                     onChange={(e) => setFiltroHasta(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)]"
+                    className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 text-[var(--nm-text)]"
                   />
                 </div>
               </div>
@@ -609,7 +620,7 @@ export default function InventarioPage() {
           </div>
           <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
             <p className="text-xs text-[var(--nm-text-subtle)]">Valor página</p>
-            <p className="text-base font-bold text-green-700 truncate">{formatMxn(totalValorPagina)}</p>
+            <p className="text-base font-bold text-blue-700 truncate">{formatMxn(totalValorPagina)}</p>
           </div>
           <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
             <p className="text-xs text-[var(--nm-text-subtle)]">Vencen pronto</p>
@@ -637,7 +648,7 @@ export default function InventarioPage() {
                   onClick={() => handlePageSizeChange(size)}
                   className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-colors ${
                     pageSize === size
-                      ? 'bg-green-600 text-white'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
@@ -651,10 +662,11 @@ export default function InventarioPage() {
           <div className="flex flex-col gap-2">
             {registros.map((r) => {
               const expiryStatus = getExpiryStatus(r.fecha_caducidad ?? null)
+              const stockBajo = r.stock_minimo > 0 && r.cantidad <= r.stock_minimo
               return (
                 <div
                   key={r.id}
-                  className={`nm-card p-4 ${expiryStatus === 'expired' ? 'border-red-200' : expiryStatus === 'soon' ? 'border-amber-200' : 'border-gray-200'}`}
+                  className={`nm-card p-4 ${expiryStatus === 'expired' ? 'border-red-200' : expiryStatus === 'soon' ? 'border-amber-200' : stockBajo ? 'border-orange-200' : 'border-gray-200'}`}
                 >
                   <div className="flex justify-between items-start gap-2">
                     <div className="flex-1 min-w-0">
@@ -665,6 +677,9 @@ export default function InventarioPage() {
                         )}
                         {expiryStatus === 'soon' && (
                           <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">Vence pronto</span>
+                        )}
+                        {stockBajo && (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium shrink-0">Stock bajo</span>
                         )}
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
@@ -702,7 +717,7 @@ export default function InventarioPage() {
                       )}
                     </div>
                     <div className="flex flex-col gap-1 shrink-0">
-                      <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">
+                      <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">
                         Editar
                       </button>
                       <button onClick={() => handleDelete(r.id)} className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg">
@@ -759,7 +774,7 @@ export default function InventarioPage() {
       {/* FAB móvil */}
       <button
         onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
+        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
         aria-label="Nuevo registro"
       >
         +

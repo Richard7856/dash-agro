@@ -6,7 +6,7 @@ interface SpinnerProps {
 
 export function Spinner({ color = 'green', size = 'md', fullPage = false }: SpinnerProps) {
   const colorClass = {
-    green:  'border-green-600',
+    green:  'border-blue-600',
     red:    'border-red-500',
     yellow: 'border-yellow-500',
   }[color]

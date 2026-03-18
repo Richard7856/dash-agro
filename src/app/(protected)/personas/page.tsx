@@ -239,8 +239,8 @@ export default function PersonasPage() {
               </div>
             )}
             {p.impacto_operativo && (
-              <div className="bg-green-50 border border-green-100 rounded-xl p-3">
-                <p className="text-xs font-semibold text-green-700 mb-1">Impacto operativo</p>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <p className="text-xs font-semibold text-blue-700 mb-1">Impacto operativo</p>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{p.impacto_operativo}</p>
               </div>
             )}
@@ -254,7 +254,7 @@ export default function PersonasPage() {
         ) : (
           <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">
             Sin información de capital humano registrada.{' '}
-            <button onClick={() => openEdit(p)} className="text-green-600 hover:underline">Editar</button>
+            <button onClick={() => openEdit(p)} className="text-blue-600 hover:underline">Editar</button>
           </div>
         )}
       </div>
@@ -288,7 +288,7 @@ export default function PersonasPage() {
         <div className="flex gap-1.5">
           {([['', 'Todos'], ['activo', 'Activos'], ['inactivo', 'Inactivos']] as const).map(([val, label]) => (
             <button key={val} onClick={() => setFiltroActivo(val)}
-              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${filtroActivo === val ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'}`}>
+              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${filtroActivo === val ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}>
               {label}
             </button>
           ))}
@@ -323,12 +323,12 @@ export default function PersonasPage() {
                   <button onClick={() => openDetail(p)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">
                     Ver
                   </button>
-                  <button onClick={() => openEdit(p)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">
+                  <button onClick={() => openEdit(p)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">
                     Editar
                   </button>
                   <button
                     onClick={() => toggleActivo(p)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg ${p.activo ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-green-700 bg-green-50 hover:bg-green-100'}`}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg ${p.activo ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-blue-700 bg-blue-50 hover:bg-blue-100'}`}
                   >
                     {p.activo ? 'Desactivar' : 'Activar'}
                   </button>
@@ -341,7 +341,7 @@ export default function PersonasPage() {
 
       <button
         onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
+        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
         aria-label="Nueva persona"
       >
         +

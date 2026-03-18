@@ -169,7 +169,7 @@ export default function ReportesPage() {
         <select
           value={selectedMes}
           onChange={(e) => setSelectedMes(e.target.value)}
-          className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-green-300"
+          className="px-3 py-2 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
         >
           {last6Months().map((ym) => (
             <option key={ym} value={ym}>{mesLabel(ym)}</option>
@@ -180,9 +180,9 @@ export default function ReportesPage() {
       {/* KPIs del mes seleccionado */}
       {currentMes && (
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <div className="bg-green-50 border border-green-100 rounded-xl p-3">
-            <p className="text-xs text-green-600 font-medium">Ventas</p>
-            <p className="text-lg font-bold text-green-700">{formatMxn(currentMes.ventas)}</p>
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+            <p className="text-xs text-blue-600 font-medium">Ventas</p>
+            <p className="text-lg font-bold text-blue-700">{formatMxn(currentMes.ventas)}</p>
           </div>
           <div className="bg-orange-50 border border-orange-100 rounded-xl p-3">
             <p className="text-xs text-orange-600 font-medium">Compras + Gastos</p>
@@ -226,7 +226,7 @@ export default function ReportesPage() {
                   {meses.map((m) => (
                     <tr key={m.mes} className={`border-b border-gray-100 ${m.mes === selectedMes ? 'bg-blue-50/50' : ''}`}>
                       <td className="py-2 pr-3 font-medium text-[var(--nm-text)] capitalize">{m.label}</td>
-                      <td className="text-right py-2 px-2 text-green-700">{formatMxn(m.ventas)}</td>
+                      <td className="text-right py-2 px-2 text-blue-700">{formatMxn(m.ventas)}</td>
                       <td className="text-right py-2 px-2 text-orange-700">{formatMxn(m.compras)}</td>
                       <td className="text-right py-2 px-2 text-red-600">{formatMxn(m.gastos)}</td>
                       <td className={`text-right py-2 pl-2 font-semibold ${m.utilidad >= 0 ? 'text-blue-700' : 'text-red-600'}`}>
@@ -257,7 +257,7 @@ export default function ReportesPage() {
                     {topClientes.map((c, i) => (
                       <div key={i} className="flex items-center justify-between bg-white border border-gray-200 rounded-xl px-3 py-2.5">
                         <span className="text-sm text-[var(--nm-text)]">{c.nombre}</span>
-                        <span className="text-sm font-semibold text-green-700">{formatMxn(c.total)}</span>
+                        <span className="text-sm font-semibold text-blue-700">{formatMxn(c.total)}</span>
                       </div>
                     ))}
                   </div>

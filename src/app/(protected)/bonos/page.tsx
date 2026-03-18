@@ -188,7 +188,7 @@ export default function BonosPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-yellow-700">{formatMxn(b.monto_bonos)} bonos</p>
                       <span className="text-xs text-[var(--nm-text-subtle)]">→</span>
-                      <p className="font-semibold text-green-700">{formatMxn(b.monto_efectivo)} efectivo</p>
+                      <p className="font-semibold text-blue-700">{formatMxn(b.monto_efectivo)} efectivo</p>
                     </div>
                     <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
                       <span>{formatDate(b.fecha)}</span>

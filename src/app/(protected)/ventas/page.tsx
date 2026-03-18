@@ -12,6 +12,9 @@ import { FormHeader } from '@/components/ui/FormHeader'
 import { FORMAS_PAGO } from '@/lib/constants'
 import type { Venta, Persona, Cliente, Ubicacion, FormaPago, StatusPago, InventarioRegistro, UnidadMedida } from '@/lib/types/database.types'
 import { FotoUploader } from '@/components/ui/FotoUploader'
+import { generateNumeroFactura } from '@/lib/format'
+import { useToast } from '@/components/ui/Toast'
+import { SearchSelect } from '@/components/ui/SearchSelect'
 
 // Item local (en el formulario, antes de guardar)
 interface VentaItemLocal {
@@ -19,6 +22,7 @@ interface VentaItemLocal {
   nombre: string
   unidad: UnidadMedida
   disponible: number
+  precio_compra: number
   lote: string | null
   cantidad: string
   precio_unitario: string
@@ -32,6 +36,9 @@ const emptyForm = () => ({
   cliente_id: '',
   vendedor_id: '',
   forma_pago: 'efectivo' as FormaPago,
+  monto_efectivo: '',
+  monto_bonos: '',
+  monto_otro: '',
   gastos_extras: '',
   notas: '',
   status_pago: 'pagado' as StatusPago,
@@ -135,6 +142,69 @@ export default function VentasPage() {
     setBusqueda(''); setFiltroDesde(''); setFiltroHasta(''); setFiltroPago('')
   }
 
+  const { toast } = useToast()
+  const [generando, setGenerando] = useState<string | null>(null)
+
+  async function generarRemision(v: Venta) {
+    if (!confirm(`¿Generar remisión para la venta ${v.numero_venta ?? v.id.slice(0, 8)}?`)) return
+    setGenerando(v.id)
+    // Cargar items de la venta para las partidas
+    const { data: ventaItems } = await supabase
+      .from('ventas_items')
+      .select('*, inventario_registros(nombre_producto, unidad_medida)')
+      .eq('venta_id', v.id)
+
+    const subtotal = v.monto_total
+    const numero = generateNumeroFactura()
+    const { data: nuevaFactura, error: factErr } = await supabase
+      .from('facturas')
+      .insert({
+        numero_factura: numero,
+        fecha: v.fecha,
+        tipo: 'ingreso',
+        cliente_id: v.cliente_id ?? null,
+        proveedor_id: null,
+        subtotal,
+        iva: 0,
+        total: subtotal,
+        status: 'borrador',
+        venta_id: v.id,
+        notas: v.notas ?? null,
+      })
+      .select('id')
+      .single()
+
+    if (factErr || !nuevaFactura) {
+      setError(`Error al generar remisión: ${factErr?.message}`)
+      setGenerando(null)
+      return
+    }
+
+    // Crear partidas desde los ítems de la venta
+    if (ventaItems && ventaItems.length > 0) {
+      const partidas = ventaItems.map((it: any) => ({
+        factura_id: nuevaFactura.id,
+        descripcion: it.inventario_registros?.nombre_producto ?? 'Producto',
+        cantidad: it.cantidad,
+        precio_unitario: it.precio_unitario,
+        total: it.cantidad * it.precio_unitario,
+      }))
+      await supabase.from('facturas_partidas').insert(partidas)
+    } else {
+      // Sin items — una partida genérica
+      await supabase.from('facturas_partidas').insert({
+        factura_id: nuevaFactura.id,
+        descripcion: v.notas ?? 'Venta de mercancía',
+        cantidad: 1,
+        precio_unitario: subtotal,
+        total: subtotal,
+      })
+    }
+
+    setGenerando(null)
+    toast({ type: 'success', message: `Remisión ${numero} generada en Borrador` })
+  }
+
   const vendedores = personas.filter((p) => p.rol === 'Vendedor')
 
   function openNew() {
@@ -158,6 +228,9 @@ export default function VentasPage() {
       cliente_id: v.cliente_id ?? '',
       vendedor_id: v.vendedor_id ?? '',
       forma_pago: v.forma_pago,
+      monto_efectivo: v.monto_efectivo ? String(v.monto_efectivo) : '',
+      monto_bonos: v.monto_bonos ? String(v.monto_bonos) : '',
+      monto_otro: v.monto_otro ? String(v.monto_otro) : '',
       gastos_extras: v.gastos_extras != null ? String(v.gastos_extras) : '',
       notas: v.notas ?? '',
       status_pago: v.status_pago,
@@ -167,7 +240,7 @@ export default function VentasPage() {
     // Cargar items existentes con stock actual
     const { data: existingItems } = await supabase
       .from('ventas_items')
-      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, ean, sku, numero_lote)')
+      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, precio_compra_unitario, ean, sku, numero_lote)')
       .eq('venta_id', v.id)
 
     const loaded: VentaItemLocal[] = (existingItems ?? []).map((it: any) => ({
@@ -175,6 +248,7 @@ export default function VentasPage() {
       nombre: it.inventario_registros?.nombre_producto ?? '',
       unidad: it.inventario_registros?.unidad_medida ?? 'unidad',
       disponible: (it.inventario_registros?.cantidad ?? 0) + it.cantidad, // restore = actual + lo que ya se vendió
+      precio_compra: it.inventario_registros?.precio_compra_unitario ?? 0,
       lote: it.inventario_registros?.numero_lote ?? null,
       cantidad: String(it.cantidad),
       precio_unitario: String(it.precio_unitario),
@@ -196,6 +270,7 @@ export default function VentasPage() {
       nombre: p.nombre_producto,
       unidad: p.unidad_medida,
       disponible: p.cantidad,
+      precio_compra: p.precio_compra_unitario,
       lote: p.numero_lote ?? null,
       cantidad: '1',
       precio_unitario: '',
@@ -253,6 +328,9 @@ export default function VentasPage() {
       vendedor_id: form.vendedor_id || null,
       forma_pago: form.forma_pago,
       monto_total: montoFinal,
+      monto_efectivo: form.forma_pago === 'mixto' ? (parseFloat(form.monto_efectivo) || 0) : 0,
+      monto_bonos: form.forma_pago === 'mixto' ? (parseFloat(form.monto_bonos) || 0) : 0,
+      monto_otro: form.forma_pago === 'mixto' ? (parseFloat(form.monto_otro) || 0) : 0,
       gastos_extras: form.gastos_extras ? parseFloat(form.gastos_extras) : 0,
       notas: form.notas || null,
       status_pago: form.status_pago,
@@ -312,6 +390,39 @@ export default function VentasPage() {
       }
     }
 
+    // Auto-generar remisión si venta a crédito
+    if (form.status_pago !== 'pagado' && ventaId && !editId) {
+      const folioRemision = generateNumeroFactura()
+      const { data: factura } = await supabase.from('facturas').insert({
+        numero_factura: folioRemision,
+        fecha: form.fecha,
+        tipo: 'ingreso',
+        status: 'emitida',
+        cliente_id: form.cliente_id || null,
+        venta_id: ventaId,
+        subtotal: montoFinal,
+        iva: 0,
+        total: montoFinal,
+        notas: `Remisión auto-generada desde venta ${payload.numero_venta}`,
+      }).select('id').single()
+
+      if (factura) {
+        const partidas = items
+          .filter((it) => (parseFloat(it.cantidad) || 0) > 0)
+          .map((it) => ({
+            factura_id: factura.id,
+            descripcion: it.nombre,
+            cantidad: parseFloat(it.cantidad) || 0,
+            precio_unitario: parseFloat(it.precio_unitario) || 0,
+            total: (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio_unitario) || 0),
+          }))
+        if (partidas.length > 0) {
+          await supabase.from('facturas_partidas').insert(partidas)
+        }
+        toast({ message: `Remisión ${folioRemision} generada`, type: 'success' })
+      }
+    }
+
     setSaving(false)
     setView('list')
     loadData()
@@ -359,7 +470,7 @@ export default function VentasPage() {
                 placeholder="Buscar producto por nombre, EAN, SKU…"
                 value={busquedaProducto}
                 onChange={(e) => setBusquedaProducto(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-green-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
+                className="w-full pl-9 pr-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)]"
               />
             </div>
 
@@ -372,13 +483,13 @@ export default function VentasPage() {
                     key={p.id}
                     type="button"
                     onClick={() => agregarProducto(p)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-green-50 border-b last:border-b-0 border-gray-100 text-left"
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0 border-gray-100 text-left"
                   >
                     <div>
                       <span className="font-medium text-[var(--nm-text)]">{p.nombre_producto}</span>
                       {p.numero_lote && <span className="text-xs text-[var(--nm-text-subtle)] ml-2">Lote: {p.numero_lote}</span>}
                     </div>
-                    <span className={`text-xs font-semibold ml-2 shrink-0 ${p.cantidad <= 0 ? 'text-red-500' : 'text-green-700'}`}>
+                    <span className={`text-xs font-semibold ml-2 shrink-0 ${p.cantidad <= 0 ? 'text-red-500' : 'text-blue-700'}`}>
                       {p.cantidad} {p.unidad_medida}
                     </span>
                   </button>
@@ -400,6 +511,9 @@ export default function VentasPage() {
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-[var(--nm-text)] truncate">{item.nombre}</p>
                           {item.lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {item.lote}</p>}
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            Stock: {item.disponible} {item.unidad} · Costo: {formatMxn(item.precio_compra)}
+                          </p>
                           {stockBajo && (
                             <p className="text-xs text-amber-600 font-medium">⚠ Solo {item.disponible} {item.unidad} disponibles</p>
                           )}
@@ -417,7 +531,7 @@ export default function VentasPage() {
                             type="number" min="0.001" step="0.001"
                             value={item.cantidad}
                             onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: e.target.value } : it))}
-                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-green-500"
+                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
                           />
                         </div>
                         <div>
@@ -426,12 +540,12 @@ export default function VentasPage() {
                             type="number" min="0" step="0.01" placeholder="0.00"
                             value={item.precio_unitario}
                             onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: e.target.value } : it))}
-                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-green-500"
+                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
                           />
                         </div>
                       </div>
                       {subtotal > 0 && (
-                        <p className="text-xs text-green-700 font-semibold mt-1 text-right">{formatMxn(subtotal)}</p>
+                        <p className="text-xs text-blue-700 font-semibold mt-1 text-right">{formatMxn(subtotal)}</p>
                       )}
                     </div>
                   )
@@ -442,7 +556,7 @@ export default function VentasPage() {
             {tieneItems && (
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs text-[var(--nm-text-subtle)]">{items.length} producto{items.length !== 1 ? 's' : ''}</span>
-                <span className="text-sm font-bold text-green-700">Total: {formatMxn(montoCalculado)}</span>
+                <span className="text-sm font-bold text-blue-700">Total: {formatMxn(montoCalculado)}</span>
               </div>
             )}
 
@@ -466,27 +580,72 @@ export default function VentasPage() {
             </FormField>
           </div>
 
+          {form.forma_pago === 'mixto' && (
+            <div className="border border-gray-200 rounded-xl p-3 bg-gray-50 flex flex-col gap-2">
+              <p className="text-xs font-semibold text-[var(--nm-text-muted)]">Desglose de pago</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-xs text-gray-500 mb-0.5 block">Efectivo</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="$0"
+                    value={form.monto_efectivo}
+                    onChange={(e) => setForm((f) => ({ ...f, monto_efectivo: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-0.5 block">Bonos</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="$0"
+                    value={form.monto_bonos}
+                    onChange={(e) => setForm((f) => ({ ...f, monto_bonos: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-0.5 block">Otro</label>
+                  <input
+                    type="number" min="0" step="0.01" placeholder="$0"
+                    value={form.monto_otro}
+                    onChange={(e) => setForm((f) => ({ ...f, monto_otro: e.target.value }))}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-right text-gray-500">
+                Suma: {formatMxn((parseFloat(form.monto_efectivo) || 0) + (parseFloat(form.monto_bonos) || 0) + (parseFloat(form.monto_otro) || 0))}
+              </p>
+            </div>
+          )}
+
           <FormField label="Cliente">
-            <Select value={form.cliente_id} onChange={(e) => setForm((f) => ({ ...f, cliente_id: e.target.value }))}>
-              <option value="">— Ninguno —</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </Select>
+            <SearchSelect
+              options={clientes.map((c) => ({ id: c.id, label: c.nombre }))}
+              value={form.cliente_id}
+              onChange={(id) => setForm((f) => ({ ...f, cliente_id: id }))}
+              placeholder="Buscar cliente…"
+            />
           </FormField>
 
           {vendedores.length > 0 && (
             <FormField label="Vendedor">
-              <Select value={form.vendedor_id} onChange={(e) => setForm((f) => ({ ...f, vendedor_id: e.target.value }))}>
-                <option value="">— Ninguno —</option>
-                {vendedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Select>
+              <SearchSelect
+                options={vendedores.map((p) => ({ id: p.id, label: p.nombre }))}
+                value={form.vendedor_id}
+                onChange={(id) => setForm((f) => ({ ...f, vendedor_id: id }))}
+                placeholder="Buscar vendedor…"
+              />
             </FormField>
           )}
 
           <FormField label="Ubicación">
-            <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value }))}>
-              <option value="">— Ninguna —</option>
-              {ubicaciones.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-            </Select>
+            <SearchSelect
+              options={ubicaciones.map((u) => ({ id: u.id, label: u.nombre }))}
+              value={form.ubicacion_id}
+              onChange={(id) => setForm((f) => ({ ...f, ubicacion_id: id }))}
+              placeholder="Buscar ubicación…"
+              emptyLabel="— Ninguna —"
+            />
           </FormField>
 
           <FormField label="Notas">
@@ -543,12 +702,12 @@ export default function VentasPage() {
               placeholder="Buscar folio, persona, notas..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
-              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+              className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
             />
           </div>
           <button
             onClick={() => setShowFiltros((v) => !v)}
-            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFiltros || (filtroDesde || filtroHasta || filtroPago) ? 'bg-green-50 border-green-300 text-green-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors ${showFiltros || (filtroDesde || filtroHasta || filtroPago) ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'}`}
           >
             Filtros {(filtroDesde || filtroHasta || filtroPago) ? '●' : ''}
           </button>
@@ -560,18 +719,18 @@ export default function VentasPage() {
               <div>
                 <label className="text-xs text-[var(--nm-text-muted)] mb-1 block">Desde</label>
                 <input type="date" value={filtroDesde} onChange={(e) => setFiltroDesde(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
               </div>
               <div>
                 <label className="text-xs text-[var(--nm-text-muted)] mb-1 block">Hasta</label>
                 <input type="date" value={filtroHasta} onChange={(e) => setFiltroHasta(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" />
               </div>
             </div>
             <div>
               <label className="text-xs text-[var(--nm-text-muted)] mb-1 block">Forma de pago</label>
               <select value={filtroPago} onChange={(e) => setFiltroPago(e.target.value)}
-                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white">
+                className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
                 <option value="">Todas</option>
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </select>
@@ -599,7 +758,7 @@ export default function VentasPage() {
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-green-700">{formatMxn(v.monto_total)}</p>
+                        <p className="font-semibold text-blue-700">{formatMxn(v.monto_total)}</p>
                         {v.numero_venta && (
                           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-mono">{v.numero_venta}</span>
                         )}
@@ -622,7 +781,7 @@ export default function VentasPage() {
                       {ventaItems && ventaItems.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {ventaItems.map((it, idx) => (
-                            <span key={idx} className="text-xs bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5">
+                            <span key={idx} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5">
                               {it.inventario_registros?.nombre_producto ?? '—'} ×{it.cantidad}
                             </span>
                           ))}
@@ -646,6 +805,14 @@ export default function VentasPage() {
                 <div className="flex border-t border-[var(--nm-bg-inset)]">
                   <button onClick={() => openEdit(v)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50 transition-colors">Editar</button>
                   <div className="w-px bg-gray-100" />
+                  <button
+                    onClick={() => generarRemision(v)}
+                    disabled={generando === v.id}
+                    className="flex-1 py-2 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-50"
+                  >
+                    {generando === v.id ? '...' : 'Remisión'}
+                  </button>
+                  <div className="w-px bg-gray-100" />
                   <button onClick={() => handleDelete(v.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors">Eliminar</button>
                 </div>
               </div>
@@ -656,7 +823,7 @@ export default function VentasPage() {
 
       <button
         onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
+        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
         aria-label="Nueva venta"
       >
         +

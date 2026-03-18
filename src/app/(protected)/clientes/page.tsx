@@ -203,7 +203,7 @@ export default function ClientesPage() {
           {(['historial', 'sugerencias'] as const).map((tab) => (
             <button key={tab} onClick={() => setDetailTab(tab)}
               className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-                detailTab === tab ? 'border-green-600 text-green-700' : 'border-transparent text-[var(--nm-text-muted)] hover:text-gray-700'
+                detailTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-[var(--nm-text-muted)] hover:text-gray-700'
               }`}>
               {tab === 'historial' ? 'Historial de ventas' : 'Sugerencias'}
             </button>
@@ -248,7 +248,7 @@ export default function ClientesPage() {
                         {item.cantidad} {item.unidad_medida} · {formatMxn(item.precio_compra_unitario)}/u
                       </p>
                     </div>
-                    <span className="shrink-0 text-xs font-semibold bg-green-50 text-green-700 px-2 py-1 rounded-lg">
+                    <span className="shrink-0 text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-1 rounded-lg">
                       {item.cantidad} en stock
                     </span>
                   </div>
@@ -284,7 +284,7 @@ export default function ClientesPage() {
         <div className="flex gap-1.5">
           {([['', 'Todos'], ['activo', 'Activos'], ['inactivo', 'Inactivos']] as const).map(([val, label]) => (
             <button key={val} onClick={() => setFiltroActivo(val)}
-              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${filtroActivo === val ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600 border-gray-200 hover:border-green-400'}`}>
+              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${filtroActivo === val ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400'}`}>
               {label}
             </button>
           ))}
@@ -313,9 +313,9 @@ export default function ClientesPage() {
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <button onClick={() => openDetail(c)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">Ver</button>
-                  <button onClick={() => openEdit(c)} className="px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg">Editar</button>
+                  <button onClick={() => openEdit(c)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">Editar</button>
                   <button onClick={() => toggleActivo(c)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-lg ${c.activo ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-green-700 bg-green-50 hover:bg-green-100'}`}>
+                    className={`px-3 py-1.5 text-xs font-medium rounded-lg ${c.activo ? 'text-amber-700 bg-amber-50 hover:bg-amber-100' : 'text-blue-700 bg-blue-50 hover:bg-blue-100'}`}>
                     {c.activo ? 'Desactivar' : 'Activar'}
                   </button>
                 </div>
@@ -326,7 +326,7 @@ export default function ClientesPage() {
       )}
 
       <button onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
+        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20 active:scale-95 transition-transform"
         aria-label="Nuevo cliente">+
       </button>
     </div>

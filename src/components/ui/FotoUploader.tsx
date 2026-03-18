@@ -111,7 +111,7 @@ export function FotoUploader({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="flex items-center gap-2 text-sm text-[var(--nm-primary)] font-medium py-1.5 px-3 rounded-lg border border-dashed border-[var(--nm-primary)] bg-green-50 hover:bg-green-100 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 text-sm text-[var(--nm-primary)] font-medium py-1.5 px-3 rounded-lg border border-dashed border-[var(--nm-primary)] bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50"
         >
           {uploading ? (
             <>

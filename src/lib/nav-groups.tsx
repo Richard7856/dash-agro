@@ -57,6 +57,17 @@ export const NAV_GROUPS = [
         ),
       },
       {
+        href: '/cotizaciones',
+        label: 'Cotizaciones',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+            <rect x="9" y="3" width="6" height="4" rx="1" />
+            <path d="M9 14l2 2 4-4" />
+          </svg>
+        ),
+      },
+      {
         href: '/bonos',
         label: 'Bonos gasolina',
         icon: (
@@ -174,6 +185,18 @@ export const NAV_GROUPS = [
           <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
             <polyline points="16,18 22,12 16,6" />
             <polyline points="8,6 2,12 8,18" />
+          </svg>
+        ),
+      },
+      {
+        href: '/changelog',
+        label: 'Funciones',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+            <polyline points="14,2 14,8 20,8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
           </svg>
         ),
       },

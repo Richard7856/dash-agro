@@ -111,7 +111,7 @@ export default function ConfiguracionPage() {
       {/* Lista de claves */}
       {loading ? (
         <div className="flex justify-center py-10">
-          <div className="w-7 h-7 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-7 h-7 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : keys.length === 0 ? (
         <div className="text-center py-10 text-[var(--nm-text-subtle)] text-sm">Sin claves generadas. Crea una para empezar.</div>
@@ -123,7 +123,7 @@ export default function ConfiguracionPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold text-[var(--nm-text)]">{k.nombre}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${k.activo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-[var(--nm-text-muted)]'}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${k.activo ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-[var(--nm-text-muted)]'}`}>
                       {k.activo ? 'Activa' : 'Revocada'}
                     </span>
                   </div>
@@ -173,7 +173,7 @@ export default function ConfiguracionPage() {
                   </code>
                   <button
                     onClick={copyKey}
-                    className={`shrink-0 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${copied ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`shrink-0 px-3 py-2 rounded-xl text-sm font-medium transition-colors ${copied ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                   >
                     {copied ? '✓' : 'Copiar'}
                   </button>

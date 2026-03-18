@@ -76,6 +76,10 @@ export function generateNumeroFactura(): string {
   return generateFolio('FAC')
 }
 
+export function generateNumeroCotizacion(): string {
+  return generateFolio('COT')
+}
+
 import type { StatusPago } from '@/lib/types/database.types'
 export function formatStatusPago(s: StatusPago): string {
   const labels: Record<StatusPago, string> = {

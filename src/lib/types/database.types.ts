@@ -65,11 +65,15 @@ interface CompraRow {
   proveedor_id: string | null
   forma_pago: FormaPago
   monto_total: number
+  monto_pagado: number
   descripcion: string | null
   gastos: number | null
   notas: string | null
   status_pago: StatusPago
   fecha_vencimiento: string | null
+  monto_efectivo: number
+  monto_bonos: number
+  monto_otro: number
   fotos: string[]
   created_at: string
   updated_at: string
@@ -85,12 +89,16 @@ interface VentaRow {
   vendedor_id: string | null
   forma_pago: FormaPago
   monto_total: number
+  monto_pagado: number
   compra_origen_id: string | null
   fecha_entrega: string | null
   gastos_extras: number | null
   notas: string | null
   status_pago: StatusPago
   fecha_vencimiento: string | null
+  monto_efectivo: number
+  monto_bonos: number
+  monto_otro: number
   fotos: string[]
   created_at: string
   updated_at: string
@@ -146,6 +154,7 @@ interface InventarioRegistroRow {
   sku: string | null
   nombre_producto: string
   cantidad: number
+  stock_minimo: number
   precio_compra_unitario: number
   precio_compra_total: number
   numero_lote: string | null
@@ -252,6 +261,57 @@ export interface VentaItem extends VentaItemRow {
 
 export interface CompraItem extends CompraItemRow {
   inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida' | 'cantidad' | 'ean' | 'sku' | 'numero_lote'> | null
+}
+
+// ─── Cotizaciones ────────────────────────────────────────────────────────────
+
+export type CotizacionRondaStatus = 'abierta' | 'cerrada'
+
+interface TiendaRow {
+  id: string
+  nombre: string
+  activo: boolean
+  created_at: string
+}
+
+interface CotizacionRondaRow {
+  id: string
+  nombre: string | null
+  fecha: string
+  status: CotizacionRondaStatus
+  notas: string | null
+  created_at: string
+}
+
+interface CotizacionProductoRow {
+  id: string
+  ronda_id: string
+  nombre_producto: string
+  orden: number
+  created_at: string
+}
+
+interface CotizacionPrecioRow {
+  id: string
+  producto_id: string
+  tienda_id: string
+  precio: number
+  created_at: string
+  updated_at: string
+}
+
+export type Tienda = TiendaRow
+
+export interface CotizacionRonda extends CotizacionRondaRow {
+  cotizacion_productos?: CotizacionProducto[]
+}
+
+export interface CotizacionProducto extends CotizacionProductoRow {
+  cotizacion_precios?: CotizacionPrecio[]
+}
+
+export interface CotizacionPrecio extends CotizacionPrecioRow {
+  tiendas?: { nombre: string } | null
 }
 
 // ─── Database type para createClient<Database> ──────────────────────────────

@@ -24,6 +24,15 @@ interface Stats {
   valorInventario: number
 }
 
+interface AlertaStock {
+  id: string
+  nombre_producto: string
+  cantidad: number
+  stock_minimo: number
+  unidad_medida: string
+  fecha_caducidad: string | null
+}
+
 interface WeeklyEntry {
   semana: string
   ventas: number
@@ -83,6 +92,8 @@ export default function DashboardPage() {
   const [clientes, setClientes] = useState<ClienteDropdown[]>([])
   const [proveedores, setProveedores] = useState<ProveedorDropdown[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
+  const [alertasStock, setAlertasStock] = useState<AlertaStock[]>([])
+  const [alertasCaducidad, setAlertasCaducidad] = useState<AlertaStock[]>([])
   const [loading, setLoading] = useState(true)
 
   const [quickType, setQuickType] = useState<QuickType>(null)
@@ -103,6 +114,9 @@ export default function DashboardPage() {
     hace42.setDate(hace42.getDate() - 42)
     const hace42str = hace42.toISOString().split('T')[0]
 
+    const today = new Date().toISOString().split('T')[0]
+    const soon = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
+
     const [
       { data: comprasData },
       { data: ventasData },
@@ -113,6 +127,8 @@ export default function DashboardPage() {
       { data: inventarioData },
       { data: ventasSemana },
       { data: comprasSemana },
+      { data: stockBajoData },
+      { data: caducidadData },
     ] = await Promise.all([
       supabase
         .from('compras')
@@ -147,6 +163,19 @@ export default function DashboardPage() {
         .select('fecha, monto_total')
         .gte('fecha', hace42str)
         .order('fecha', { ascending: true }),
+      supabase
+        .from('inventario_registros')
+        .select('id, nombre_producto, cantidad, stock_minimo, unidad_medida, fecha_caducidad')
+        .gt('stock_minimo', 0)
+        .order('nombre_producto')
+        .limit(100),
+      supabase
+        .from('inventario_registros')
+        .select('id, nombre_producto, cantidad, stock_minimo, unidad_medida, fecha_caducidad')
+        .lte('fecha_caducidad', soon)
+        .gte('fecha_caducidad', today)
+        .order('fecha_caducidad', { ascending: true })
+        .limit(5),
     ])
 
     const totalC = (comprasData ?? []).reduce((s, r) => s + (r.monto_total ?? 0), 0)
@@ -160,6 +189,9 @@ export default function DashboardPage() {
     setClientes(clientesData ?? [])
     setProveedores(proveedoresData ?? [])
     setUbicaciones(ubicData ?? [])
+    // Alertas: filtrar client-side para columna vs columna
+    setAlertasStock(((stockBajoData ?? []) as AlertaStock[]).filter((r) => r.cantidad <= r.stock_minimo).slice(0, 5))
+    setAlertasCaducidad((caducidadData ?? []) as AlertaStock[])
 
     // Build weekly chart data (last 6 unique weeks)
     const ventasMap = groupByWeek((ventasSemana ?? []) as { fecha: string; monto_total: number }[])
@@ -279,7 +311,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen nm-page">
-        <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -288,7 +320,7 @@ export default function DashboardPage() {
     { label: 'Ventas', value: formatMxn(stats.totalVentas), variant: 'nm-card-sm', textColor: 'text-[var(--nm-accent)]' },
     { label: 'Compras', value: formatMxn(stats.totalCompras), variant: 'nm-card-sm', textColor: 'text-[var(--nm-text)]' },
     { label: 'Gastos', value: formatMxn(stats.totalGastos), variant: 'nm-card-sm', textColor: 'text-red-600' },
-    { label: 'Utilidad', value: formatMxn(utilidad), variant: utilidad >= 0 ? 'nm-card-green' : 'nm-card-red', textColor: utilidad >= 0 ? 'text-green-800' : 'text-red-700' },
+    { label: 'Utilidad', value: formatMxn(utilidad), variant: utilidad >= 0 ? 'nm-card-green' : 'nm-card-red', textColor: utilidad >= 0 ? 'text-blue-800' : 'text-red-700' },
     { label: 'Inventario', value: formatMxn(stats.valorInventario), variant: 'nm-card-sm', textColor: 'text-[var(--nm-text-muted)]' },
   ]
 
@@ -344,6 +376,42 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* Alertas */}
+      {(alertasStock.length > 0 || alertasCaducidad.length > 0) && (
+        <div className="flex flex-col gap-2 mb-4">
+          {alertasStock.length > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-orange-700 uppercase tracking-wider mb-2">
+                ⚠ Stock bajo ({alertasStock.length})
+              </p>
+              <div className="flex flex-col gap-1">
+                {alertasStock.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between text-sm">
+                    <span className="text-orange-800 truncate mr-2">{r.nombre_producto}</span>
+                    <span className="text-orange-600 font-medium shrink-0">{r.cantidad} / {r.stock_minimo} {r.unidad_medida}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {alertasCaducidad.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">
+                📅 Por caducar ({alertasCaducidad.length})
+              </p>
+              <div className="flex flex-col gap-1">
+                {alertasCaducidad.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between text-sm">
+                    <span className="text-amber-800 truncate mr-2">{r.nombre_producto}</span>
+                    <span className="text-amber-600 font-medium shrink-0">{formatDate(r.fecha_caducidad!)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Weekly chart */}
       {weeklyData.length > 0 && (
