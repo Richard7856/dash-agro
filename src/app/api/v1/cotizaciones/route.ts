@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     fecha: r.fecha,
     status: r.status,
     notas: r.notas,
+    fotos: r.fotos,
     created_at: r.created_at,
     productos_count: Array.isArray(r.cotizacion_productos) ? r.cotizacion_productos.length : 0,
   }))
@@ -50,14 +51,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: null, error: 'fecha es requerido' }, { status: 400 })
   }
 
-  const productos = body.productos as string[] | undefined
-  if (!productos || !Array.isArray(productos) || productos.length === 0) {
-    return NextResponse.json({ data: null, error: 'productos (array de strings) es requerido' }, { status: 400 })
+  // Accept both string[] (legacy) and {nombre, precio_referencia?}[] (new)
+  const rawProductos = body.productos as unknown
+  if (!rawProductos || !Array.isArray(rawProductos) || rawProductos.length === 0) {
+    return NextResponse.json({ data: null, error: 'productos (array) es requerido' }, { status: 400 })
   }
 
   const supabase = getSupabaseServer()
 
-  // create ronda
   const { data: ronda, error: rErr } = await supabase
     .from('cotizacion_rondas')
     .insert({
@@ -72,14 +73,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ data: null, error: rErr?.message ?? 'Error creando ronda' }, { status: 400 })
   }
 
-  // insert productos
-  const { error: pErr } = await supabase.from('cotizacion_productos').insert(
-    productos.map((p, i) => ({ ronda_id: ronda.id, nombre_producto: p, orden: i }))
-  )
+  const inserts = (rawProductos as Array<string | { nombre: string; precio_referencia?: number }>).map((p, i) => {
+    if (typeof p === 'string') {
+      return { ronda_id: ronda.id, nombre_producto: p, orden: i, precio_referencia: null }
+    }
+    return {
+      ronda_id: ronda.id,
+      nombre_producto: p.nombre,
+      orden: i,
+      precio_referencia: p.precio_referencia ?? null,
+    }
+  })
+
+  const { error: pErr } = await supabase.from('cotizacion_productos').insert(inserts)
 
   if (pErr) {
     return NextResponse.json({ data: null, error: pErr.message }, { status: 400 })
   }
 
-  return NextResponse.json({ data: { ...ronda, productos_count: productos.length }, error: null }, { status: 201 })
+  return NextResponse.json({ data: { ...ronda, productos_count: rawProductos.length }, error: null }, { status: 201 })
 }

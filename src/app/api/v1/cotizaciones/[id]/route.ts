@@ -38,6 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     id: p.id,
     nombre_producto: p.nombre_producto,
     orden: p.orden,
+    precio_referencia: p.precio_referencia ?? null,
     precios: ((p as Record<string, unknown>).cotizacion_precios as Array<{
       tienda_id: string
       precio: number

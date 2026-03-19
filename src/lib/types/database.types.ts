@@ -280,6 +280,7 @@ interface CotizacionRondaRow {
   fecha: string
   status: CotizacionRondaStatus
   notas: string | null
+  fotos: string[]
   created_at: string
 }
 
@@ -288,6 +289,7 @@ interface CotizacionProductoRow {
   ronda_id: string
   nombre_producto: string
   orden: number
+  precio_referencia: number | null
   created_at: string
 }
 
