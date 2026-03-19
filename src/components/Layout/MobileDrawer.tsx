@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { NAV_GROUPS } from '@/lib/nav-groups'
+import { NAV_GROUPS, filterNavByRole } from '@/lib/nav-groups'
+import { useAuth } from '@/lib/auth-context'
 
 interface MobileDrawerProps {
   isOpen: boolean
@@ -12,6 +13,8 @@ interface MobileDrawerProps {
 
 export function MobileDrawer({ isOpen, onClose, onLogout }: MobileDrawerProps) {
   const pathname = usePathname()
+  const { rol, profile } = useAuth()
+  const groups = filterNavByRole(NAV_GROUPS, rol)
 
   return (
     <>
@@ -37,7 +40,9 @@ export function MobileDrawer({ isOpen, onClose, onLogout }: MobileDrawerProps) {
         <div className="px-5 py-5 border-b border-[var(--nm-bg-inset)] flex items-center justify-between">
           <div>
             <span className="text-[var(--nm-accent)] font-bold text-lg tracking-tight">Agrodelicias</span>
-            <p className="text-xs text-[var(--nm-text-subtle)] mt-0.5">Panel operativo</p>
+            <p className="text-xs text-[var(--nm-text-subtle)] mt-0.5">
+              {profile?.nombre ?? profile?.email ?? 'Panel operativo'}
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -53,7 +58,7 @@ export function MobileDrawer({ isOpen, onClose, onLogout }: MobileDrawerProps) {
 
         {/* Nav groups */}
         <nav className="flex-1 px-3 py-4 flex flex-col gap-4 overflow-y-auto">
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.label}>
               <p className="px-2 mb-1 text-[10px] font-semibold tracking-widest text-[var(--nm-text-subtle)]">
                 {group.label}

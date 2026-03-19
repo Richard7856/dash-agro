@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import { FotoUploader } from '@/components/ui/FotoUploader'
+import { useAuth } from '@/lib/auth-context'
 import type {
   Tienda,
   CotizacionRonda,
@@ -42,6 +43,8 @@ function priceClass(precio: number | undefined, referencia: number | null, isBes
 // ─── page ───────────────────────────────────────────────────────────────────
 
 export default function CotizacionesPage() {
+  const { isAdmin, isCotizador } = useAuth()
+
   /* list state */
   const [rondas, setRondas] = useState<(CotizacionRonda & { _count: number })[]>([])
   const [tiendas, setTiendas] = useState<Tienda[]>([])
@@ -552,7 +555,7 @@ export default function CotizacionesPage() {
       <PageHeader
         title="Cotizaciones"
         subtitle={`${rondas.length} rondas`}
-        action={{ label: 'Nueva ronda', onClick: openNew }}
+        action={isAdmin ? { label: 'Nueva ronda', onClick: openNew } : undefined}
       />
 
       {rondas.length === 0 ? (
@@ -592,27 +595,31 @@ export default function CotizacionesPage() {
                   </svg>
                 </div>
               </button>
-              <div className="flex border-t border-[var(--nm-bg-inset)]">
-                <button onClick={() => openEdit(r)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50">
-                  Editar
-                </button>
-                <div className="w-px bg-gray-100" />
-                <button onClick={() => handleDelete(r.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50">
-                  Eliminar
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex border-t border-[var(--nm-bg-inset)]">
+                  <button onClick={() => openEdit(r)} className="flex-1 py-2 text-xs font-medium text-blue-600 hover:bg-blue-50">
+                    Editar
+                  </button>
+                  <div className="w-px bg-gray-100" />
+                  <button onClick={() => handleDelete(r.id)} className="flex-1 py-2 text-xs font-medium text-red-500 hover:bg-red-50">
+                    Eliminar
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* FAB */}
-      <button
-        onClick={openNew}
-        className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20"
-      >
-        +
-      </button>
+      {/* FAB — solo admin */}
+      {isAdmin && (
+        <button
+          onClick={openNew}
+          className="fixed bottom-20 right-4 md:hidden w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl z-20"
+        >
+          +
+        </button>
+      )}
     </div>
   )
 }

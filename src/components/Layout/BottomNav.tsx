@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useAuth } from '@/lib/auth-context'
 
-const items = [
+const adminItems = [
   {
     href: '/dashboard',
     label: 'Inicio',
@@ -57,8 +58,24 @@ const items = [
   },
 ]
 
+const cotizadorItems = [
+  {
+    href: '/cotizaciones',
+    label: 'Cotizaciones',
+    icon: (
+      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+        <rect x="9" y="3" width="6" height="4" rx="1" />
+        <path d="M9 14l2 2 4-4" />
+      </svg>
+    ),
+  },
+]
+
 export function BottomNav() {
   const pathname = usePathname()
+  const { isCotizador } = useAuth()
+  const items = isCotizador ? cotizadorItems : adminItems
 
   return (
     <nav className="nm-bottom-nav safe-area-bottom">

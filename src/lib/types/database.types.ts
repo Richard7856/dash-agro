@@ -263,6 +263,21 @@ export interface CompraItem extends CompraItemRow {
   inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida' | 'cantidad' | 'ean' | 'sku' | 'numero_lote'> | null
 }
 
+// ─── User Profiles (roles) ───────────────────────────────────────────────────
+
+export type UserRol = 'admin' | 'cotizador'
+
+interface UserProfileRow {
+  id: string
+  email: string
+  nombre: string | null
+  rol: UserRol
+  activo: boolean
+  created_at: string
+}
+
+export type UserProfile = UserProfileRow
+
 // ─── Cotizaciones ────────────────────────────────────────────────────────────
 
 export type CotizacionRondaStatus = 'abierta' | 'cerrada'

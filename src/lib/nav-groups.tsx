@@ -1,6 +1,29 @@
 // Shared navigation data — used by Sidebar (desktop) and MobileDrawer (mobile)
+import type { UserRol } from '@/lib/types/database.types'
 
-export const NAV_GROUPS = [
+export interface NavItem {
+  href: string
+  label: string
+  icon: React.ReactNode
+  roles?: UserRol[] // if undefined → all roles can see
+}
+
+export interface NavGroup {
+  label: string
+  items: NavItem[]
+}
+
+/** Filter nav groups by user role, removing empty groups */
+export function filterNavByRole(groups: NavGroup[], rol: UserRol): NavGroup[] {
+  return groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => !i.roles || i.roles.includes(rol)),
+    }))
+    .filter((g) => g.items.length > 0)
+}
+
+export const NAV_GROUPS: NavGroup[] = [
   {
     label: 'OPERACIONES',
     items: [
@@ -59,6 +82,7 @@ export const NAV_GROUPS = [
       {
         href: '/cotizaciones',
         label: 'Cotizaciones',
+        roles: ['admin', 'cotizador'],
         icon: (
           <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
