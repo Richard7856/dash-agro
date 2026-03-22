@@ -456,18 +456,54 @@ export default function CotizacionesPage() {
   async function saveCompras() {
     if (!wizRonda) return
     setWizSaving(true)
-    // Update each compra_item
-    for (const [key, qty] of Array.from(wizCompras.entries())) {
+    setError('')
+
+    // Separate primary (already in compra_items) from overflow (new rows)
+    const primaryTiendas = new Set<string>()
+    wizAsignacion.forEach((tiendaId, consolidadoId) => {
+      primaryTiendas.add(`${consolidadoId}|${tiendaId}`)
+    })
+
+    const updates: { consolidadoId: string; tiendaId: string; qty: number }[] = []
+    const inserts: { ronda_id: string; consolidado_item_id: string; tienda_id: string; cantidad_comprada: number; precio_comprado: number }[] = []
+
+    wizCompras.forEach((qty, key) => {
       const [consolidadoId, tiendaId] = key.split('|')
-      await supabase.from('compra_items')
-        .update({ cantidad_comprada: qty })
+      if (primaryTiendas.has(key)) {
+        updates.push({ consolidadoId, tiendaId, qty })
+      } else {
+        // Overflow: new compra_item
+        const precio = wizPrecios.get(key) ?? 0
+        inserts.push({
+          ronda_id: wizRonda.id,
+          consolidado_item_id: consolidadoId,
+          tienda_id: tiendaId,
+          cantidad_comprada: qty,
+          precio_comprado: precio,
+        })
+      }
+    })
+
+    // Update existing
+    for (const u of updates) {
+      const { error: uErr } = await supabase.from('compra_items')
+        .update({ cantidad_comprada: u.qty })
         .eq('ronda_id', wizRonda.id)
-        .eq('consolidado_item_id', consolidadoId)
-        .eq('tienda_id', tiendaId)
+        .eq('consolidado_item_id', u.consolidadoId)
+        .eq('tienda_id', u.tiendaId)
+      if (uErr) { setError(`Error actualizando: ${uErr.message}`); setWizSaving(false); return }
     }
+
+    // Insert overflow
+    if (inserts.length > 0) {
+      const { error: iErr } = await supabase.from('compra_items').insert(inserts)
+      if (iErr) { setError(`Error guardando overflow: ${iErr.message}`); setWizSaving(false); return }
+    }
+
     await supabase.from('pedido_rondas').update({ status: 'comprando', fotos: wizFotos }).eq('id', wizRonda.id)
     setWizRonda({ ...wizRonda, status: 'comprando' })
     setWizSaving(false)
+    setWizStep(6)
   }
 
   // ─── Step 6: Generate separación + remisión ───────────────────────────────
