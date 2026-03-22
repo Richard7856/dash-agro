@@ -18,6 +18,7 @@ import type {
   ConsolidadoItem,
   ConsolidadoPrecio,
   PedidoCliente,
+  SeparacionItem,
 } from '@/lib/types/database.types'
 
 type View = 'list' | 'form' | 'wizard'
@@ -77,6 +78,7 @@ export default function CotizacionesPage() {
   const [wizPrecios, setWizPrecios] = useState<Map<string, number>>(new Map())
   const [wizAsignacion, setWizAsignacion] = useState<Map<string, string>>(new Map()) // consolidadoItemId → tiendaId
   const [wizCompras, setWizCompras] = useState<Map<string, number>>(new Map()) // "consolidadoId|tiendaId" → qty
+  const [wizSeparacion, setWizSeparacion] = useState<SeparacionItem[]>([])
   const [wizFotos, setWizFotos] = useState<string[]>([])
   const [wizSaving, setWizSaving] = useState(false)
 
@@ -226,6 +228,13 @@ export default function CotizacionesPage() {
     }
     setWizAsignacion(aMap)
     setWizCompras(cMap)
+
+    // Load separacion if completed
+    const { data: sepData } = await supabase
+      .from('separacion_items')
+      .select('*, pedido_clientes(cliente_nombre), consolidado_items(nombre_producto)')
+      .eq('ronda_id', ronda.id)
+    setWizSeparacion((sepData ?? []) as SeparacionItem[])
 
     setView('wizard')
   }
@@ -558,6 +567,14 @@ export default function CotizacionesPage() {
 
     await supabase.from('pedido_rondas').update({ status: 'completado' }).eq('id', wizRonda.id)
     setWizRonda({ ...wizRonda, status: 'completado' })
+
+    // Reload separacion
+    const { data: sepData } = await supabase
+      .from('separacion_items')
+      .select('*, pedido_clientes(cliente_nombre), consolidado_items(nombre_producto)')
+      .eq('ronda_id', wizRonda.id)
+    setWizSeparacion((sepData ?? []) as SeparacionItem[])
+
     setWizStep(6)
     setWizSaving(false)
   }
@@ -1146,22 +1163,61 @@ export default function CotizacionesPage() {
         {wizStep === 6 && (
           <div>
             <h3 className="font-semibold text-sm mb-3">Separación por cliente</h3>
-            {wizRonda.status !== 'completado' ? (
+
+            {wizRonda.status !== 'completado' && (
               <Btn onClick={generateSeparacion} loading={wizSaving} className="w-full mb-4">
                 Generar separación
               </Btn>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {wizClientes.map((c) => (
-                  <div key={c.id} className="nm-card p-4">
-                    <h4 className="font-semibold text-sm mb-2">{c.cliente_nombre}</h4>
-                    <p className="text-xs text-gray-500">Productos asignados proporcionalmente</p>
+            )}
+
+            {wizSeparacion.length > 0 && (
+              <div className="flex flex-col gap-4">
+                {wizClientes.map((cliente) => {
+                  const items = wizSeparacion.filter(s => s.pedido_cliente_id === cliente.id)
+                  if (items.length === 0) return null
+                  const totalPiezas = items.reduce((s, i) => s + Number(i.cantidad), 0)
+                  return (
+                    <div key={cliente.id}>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-bold text-sm text-gray-800">{cliente.cliente_nombre}</h4>
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                          {items.length} productos · {totalPiezas.toFixed(0)} pz
+                        </span>
+                      </div>
+                      <div className="nm-card overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-50">
+                              <th className="text-left px-3 py-2 font-semibold border-b">Producto</th>
+                              <th className="text-right px-3 py-2 font-semibold border-b">Cantidad</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((s) => (
+                              <tr key={s.id} className="border-b border-gray-100">
+                                <td className="px-3 py-2">
+                                  {(s.consolidado_items as { nombre_producto: string } | null)?.nombre_producto ?? '—'}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium">{Number(s.cantidad).toFixed(0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {wizRonda.status === 'completado' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 text-center font-medium">
+                    ✓ Ronda completada — separación lista para preparar
                   </div>
-                ))}
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 text-center">
-                  Ronda completada
-                </div>
+                )}
               </div>
+            )}
+
+            {wizSeparacion.length === 0 && wizRonda.status === 'completado' && (
+              <p className="text-sm text-gray-400 italic text-center py-8">No se generaron asignaciones. Verifica que los productos comprados coincidan con los pedidos originales.</p>
             )}
           </div>
         )}
