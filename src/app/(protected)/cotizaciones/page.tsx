@@ -330,14 +330,20 @@ export default function CotizacionesPage() {
       const stockQty = inv ? Number(inv.cantidad) : 0
       const neta = Math.max(0, val.total - stockQty)
 
+      let pMin = val.min === Infinity ? null : val.min
+      let pMax = val.max === 0 ? null : val.max
+      // Ensure min <= max
+      if (pMin != null && pMax != null && pMin > pMax) {
+        const tmp = pMin; pMin = pMax; pMax = tmp
+      }
       inserts.push({
         ronda_id: wizRonda.id,
         nombre_producto: nombre,
         cantidad_total: val.total,
         cantidad_inventario: stockQty,
         cantidad_neta: neta,
-        precio_min: val.min === Infinity ? null : val.min,
-        precio_max: val.max === 0 ? null : val.max,
+        precio_min: pMin,
+        precio_max: pMax,
         inventario_registro_id: inv?.id ?? null,
       })
     }
@@ -405,29 +411,43 @@ export default function CotizacionesPage() {
 
   async function saveAssignment() {
     if (!wizRonda) return
+    setError('')
     setWizSaving(true)
+
+    // Auto-assign any unassigned items first
+    if (wizAsignacion.size === 0) {
+      autoAssign()
+    }
+
     // Delete old compra_items
-    await supabase.from('compra_items').delete().eq('ronda_id', wizRonda.id)
+    const { error: delErr } = await supabase.from('compra_items').delete().eq('ronda_id', wizRonda.id)
+    if (delErr) { setError(`Error limpiando asignaciones: ${delErr.message}`); setWizSaving(false); return }
+
     // Insert assignments
     const inserts: { ronda_id: string; consolidado_item_id: string; tienda_id: string; cantidad_comprada: number; precio_comprado: number }[] = []
     wizAsignacion.forEach((tiendaId, consolidadoId) => {
-      const item = wizConsolidado.find((c) => c.id === consolidadoId)
       const precio = wizPrecios.get(`${consolidadoId}|${tiendaId}`) ?? 0
       inserts.push({
         ronda_id: wizRonda.id,
         consolidado_item_id: consolidadoId,
         tienda_id: tiendaId,
-        cantidad_comprada: 0, // starts at 0, cotizadora fills it
+        cantidad_comprada: 0,
         precio_comprado: precio,
       })
     })
-    if (inserts.length > 0) {
-      const { error: err } = await supabase.from('compra_items').insert(inserts)
-      if (err) { setError(err.message); setWizSaving(false); return }
+
+    if (inserts.length === 0) {
+      setError('No hay productos asignados. Usa "Auto-asignar" primero.')
+      setWizSaving(false)
+      return
     }
+
+    const { error: insErr } = await supabase.from('compra_items').insert(inserts)
+    if (insErr) { setError(`Error guardando asignaciones: ${insErr.message}`); setWizSaving(false); return }
+
     await supabase.from('pedido_rondas').update({ status: 'asignado' }).eq('id', wizRonda.id)
     setWizRonda({ ...wizRonda, status: 'asignado' })
-    setWizStep(4)
+    setWizStep(5)
     setWizSaving(false)
   }
 

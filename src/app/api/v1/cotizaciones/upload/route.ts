@@ -80,6 +80,13 @@ export async function POST(req: NextRequest) {
         precio_min: colPrecioMin ? parseFloat(String(r[colPrecioMin])) || null : null,
         precio_max: colPrecioMax ? parseFloat(String(r[colPrecioMax])) || null : null,
       }))
+      // Ensure min <= max (swap if inverted)
+      .map((r) => {
+        if (r.precio_min != null && r.precio_max != null && r.precio_min > r.precio_max) {
+          return { ...r, precio_min: r.precio_max, precio_max: r.precio_min }
+        }
+        return r
+      })
 
     return NextResponse.json({
       data: rows,
