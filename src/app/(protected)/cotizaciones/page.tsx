@@ -688,11 +688,22 @@ export default function CotizacionesPage() {
             {isAdmin && (
               <Btn onClick={async () => {
                 setWizSaving(true)
+                setError('')
                 // If filter is active, delete items below threshold
                 if (consolidadoMinQty > 0) {
-                  const toDelete = wizConsolidado.filter(c => c.cantidad_total < consolidadoMinQty)
-                  for (const item of toDelete) {
-                    await supabase.from('consolidado_items').delete().eq('id', item.id)
+                  const idsToDelete = wizConsolidado
+                    .filter(c => Number(c.cantidad_total) < consolidadoMinQty)
+                    .map(c => c.id)
+                  if (idsToDelete.length > 0) {
+                    const { error: delErr } = await supabase
+                      .from('consolidado_items')
+                      .delete()
+                      .in('id', idsToDelete)
+                    if (delErr) {
+                      setError(`Error eliminando productos: ${delErr.message}`)
+                      setWizSaving(false)
+                      return
+                    }
                   }
                 }
                 await supabase.from('pedido_rondas').update({ status: 'cotizando' }).eq('id', wizRonda.id)
