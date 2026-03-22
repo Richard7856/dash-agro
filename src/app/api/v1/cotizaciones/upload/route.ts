@@ -34,13 +34,34 @@ export async function POST(req: NextRequest) {
 
     // Try to map columns flexibly
     const headers = Object.keys(rawRows[0])
-    const findCol = (keywords: string[]) =>
-      headers.find((h) => keywords.some((k) => h.toLowerCase().includes(k))) ?? null
+    // Normalize: lowercase, strip accents, trim
+    const norm = (s: string) =>
+      s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
 
-    const colProducto = findCol(['producto', 'nombre', 'descripcion', 'articulo', 'item'])
-    const colCantidad = findCol(['cantidad', 'qty', 'piezas', 'unidades'])
-    const colPrecioMin = findCol(['precio_min', 'min', 'minimo', 'precio minimo', 'pmin'])
-    const colPrecioMax = findCol(['precio_max', 'max', 'maximo', 'precio maximo', 'pmax'])
+    const findCol = (keywords: string[]) =>
+      headers.find((h) => keywords.some((k) => norm(h).includes(k))) ?? null
+
+    const colProducto = findCol(['descripcion', 'producto', 'nombre', 'articulo', 'item'])
+    const colCantidad = findCol(['ped', 'cantidad', 'qty', 'piezas', 'unidades'])
+
+    // Handle duplicate "COSTO MAXIMO" columns: first occurrence = min, second = max
+    const costoHeaders = headers.filter((h) => norm(h).includes('costo'))
+    let colPrecioMin: string | null = null
+    let colPrecioMax: string | null = null
+
+    if (costoHeaders.length >= 2) {
+      // Two cost columns: first = min, second = max
+      colPrecioMin = costoHeaders[0]
+      colPrecioMax = costoHeaders[1]
+    } else if (costoHeaders.length === 1) {
+      // Single cost column → use as both min and max
+      colPrecioMin = costoHeaders[0]
+      colPrecioMax = costoHeaders[0]
+    } else {
+      // Fallback: look for explicit min/max keywords
+      colPrecioMin = findCol(['precio_min', 'min', 'minimo', 'precio minimo', 'pmin'])
+      colPrecioMax = findCol(['precio_max', 'max', 'maximo', 'precio maximo', 'pmax'])
+    }
 
     if (!colProducto) {
       return NextResponse.json({
