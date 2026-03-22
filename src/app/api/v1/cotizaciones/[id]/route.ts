@@ -22,7 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // Get consolidado + precios
   const { data: consolidado } = await supabase
     .from('consolidado_items').select('*, consolidado_precios(*, tiendas(nombre))')
-    .eq('ronda_id', id).order('nombre_producto')
+    .eq('ronda_id', id).order('cantidad_total', { ascending: false })
 
   // Get compras
   const { data: compras } = await supabase

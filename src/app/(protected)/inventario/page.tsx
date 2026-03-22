@@ -681,6 +681,9 @@ export default function InventarioPage() {
                         {stockBajo && (
                           <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium shrink-0">Stock bajo</span>
                         )}
+                        {r.es_interno && (
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium shrink-0">Interno</span>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-[var(--nm-text-muted)]">
                         {r.sku && <span>SKU: {r.sku}</span>}
@@ -719,6 +722,15 @@ export default function InventarioPage() {
                     <div className="flex flex-col gap-1 shrink-0">
                       <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">
                         Editar
+                      </button>
+                      <button
+                        onClick={async () => {
+                          await supabase.from('inventario_registros').update({ es_interno: !r.es_interno }).eq('id', r.id)
+                          setRegistros((prev) => prev.map((x) => x.id === r.id ? { ...x, es_interno: !r.es_interno } : x))
+                        }}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-lg ${r.es_interno ? 'text-purple-700 bg-purple-50 hover:bg-purple-100' : 'text-gray-600 bg-gray-50 hover:bg-gray-100'}`}
+                      >
+                        {r.es_interno ? '✓ Interno' : 'Marcar interno'}
                       </button>
                       <button onClick={() => handleDelete(r.id)} className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg">
                         Borrar

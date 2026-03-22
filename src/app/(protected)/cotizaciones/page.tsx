@@ -195,7 +195,7 @@ export default function CotizacionesPage() {
     // Load consolidado + precios
     const { data: consolidado } = await supabase
       .from('consolidado_items').select('*, consolidado_precios(*, tiendas(nombre))')
-      .eq('ronda_id', ronda.id).order('nombre_producto')
+      .eq('ronda_id', ronda.id).order('cantidad_total', { ascending: false })
     setWizConsolidado((consolidado ?? []) as ConsolidadoItem[])
 
     // Build price map

@@ -163,6 +163,7 @@ interface InventarioRegistroRow {
   cajas_por_tarima: number | null
   unidad_medida: UnidadMedida
   ubicacion_id: string | null
+  es_interno: boolean
   fotos: string[]
   created_at: string
   updated_at: string
