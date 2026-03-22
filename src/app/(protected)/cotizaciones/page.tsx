@@ -65,6 +65,11 @@ export default function CotizacionesPage() {
   const [wizRonda, setWizRonda] = useState<PedidoRonda | null>(null)
   const [wizStep, setWizStep] = useState(1)
   const [wizClientes, setWizClientes] = useState<PedidoCliente[]>([])
+  const [wizAddNombre, setWizAddNombre] = useState('')
+  const [wizAddFile, setWizAddFile] = useState<UploadedFile | null>(null)
+  const [wizAddUploading, setWizAddUploading] = useState(false)
+  const [wizAddSaving, setWizAddSaving] = useState(false)
+  const [consolidadoMinQty, setConsolidadoMinQty] = useState(0) // 0 = show all
   const [wizConsolidado, setWizConsolidado] = useState<ConsolidadoItem[]>([])
   const [wizPrecios, setWizPrecios] = useState<Map<string, number>>(new Map())
   const [wizAsignacion, setWizAsignacion] = useState<Map<string, string>>(new Map()) // consolidadoItemId → tiendaId
@@ -220,6 +225,52 @@ export default function CotizacionesPage() {
     setWizCompras(cMap)
 
     setView('wizard')
+  }
+
+  // ─── Step 1 wizard: add pedido inline ─────────────────────────────────────
+
+  async function wizHandleFileUpload(file: File) {
+    setWizAddUploading(true)
+    const fd = new FormData()
+    fd.append('file', file)
+    const res = await fetch('/api/v1/cotizaciones/upload', { method: 'POST', body: fd })
+    const json = await res.json()
+    setWizAddUploading(false)
+    if (!res.ok) { setError(json.error); return }
+    setWizAddFile({ clienteNombre: wizAddNombre, fileName: file.name, rows: json.data })
+  }
+
+  async function wizSavePedido() {
+    if (!wizRonda || !wizAddFile || !wizAddNombre.trim()) return
+    setWizAddSaving(true)
+
+    // Insert pedido_cliente
+    const { data: cliente, error: cErr } = await supabase
+      .from('pedido_clientes')
+      .insert({ ronda_id: wizRonda.id, cliente_nombre: wizAddNombre.trim(), archivo_nombre: wizAddFile.fileName })
+      .select().single()
+    if (cErr || !cliente) { setError(cErr?.message ?? 'Error'); setWizAddSaving(false); return }
+
+    // Insert items
+    const items = wizAddFile.rows.map((r) => ({
+      pedido_cliente_id: cliente.id,
+      ronda_id: wizRonda.id,
+      nombre_producto: r.producto,
+      cantidad: r.cantidad,
+      precio_min: r.precio_min,
+      precio_max: r.precio_max,
+    }))
+    await supabase.from('pedido_items').insert(items)
+
+    // Reload clientes
+    const { data: freshClientes } = await supabase
+      .from('pedido_clientes').select('*, pedido_items(*)').eq('ronda_id', wizRonda.id)
+    setWizClientes((freshClientes ?? []) as PedidoCliente[])
+
+    // Reset inline form
+    setWizAddNombre('')
+    setWizAddFile(null)
+    setWizAddSaving(false)
   }
 
   // ─── Step 2: Generate consolidado ─────────────────────────────────────────
@@ -510,7 +561,36 @@ export default function CotizacionesPage() {
                 ))}
               </div>
             )}
+            {/* Inline add pedido */}
             {isAdmin && wizRonda.status === 'pedidos' && (
+              <div className="nm-card p-4 mt-3">
+                <p className="text-xs font-semibold text-gray-500 mb-2">Agregar pedido</p>
+                <input
+                  type="text" placeholder="Nombre del cliente..."
+                  value={wizAddNombre}
+                  onChange={(e) => setWizAddNombre(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white mb-2"
+                />
+                {wizAddFile ? (
+                  <div className="mb-2">
+                    <p className="text-xs text-blue-600 font-medium">{wizAddFile.fileName} — {wizAddFile.rows.length} productos</p>
+                    <Btn onClick={wizSavePedido} loading={wizAddSaving} className="w-full mt-2" disabled={!wizAddNombre.trim()}>
+                      Guardar pedido
+                    </Btn>
+                  </div>
+                ) : (
+                  <label className="block cursor-pointer">
+                    <div className={`py-4 border-2 border-dashed rounded-xl text-center text-sm transition-colors ${wizAddUploading ? 'border-blue-300 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-blue-300'}`}>
+                      {wizAddUploading ? 'Procesando...' : 'Subir archivo Excel (.xlsx)'}
+                    </div>
+                    <input type="file" accept=".xlsx,.xls" className="hidden"
+                      onChange={(e) => { if (e.target.files?.[0]) wizHandleFileUpload(e.target.files[0]) }} />
+                  </label>
+                )}
+              </div>
+            )}
+
+            {isAdmin && wizRonda.status === 'pedidos' && wizClientes.length > 0 && (
               <Btn onClick={generateConsolidado} loading={wizSaving} className="w-full mt-4">
                 Generar consolidado
               </Btn>
@@ -519,11 +599,41 @@ export default function CotizacionesPage() {
         )}
 
         {/* ── STEP 2: Consolidado ── */}
-        {wizStep === 2 && (
+        {wizStep === 2 && (() => {
+          const filtered = consolidadoMinQty > 0
+            ? wizConsolidado.filter(c => c.cantidad_total >= consolidadoMinQty)
+            : wizConsolidado
+          const aComprar = filtered.filter(c => c.cantidad_neta > 0).length
+          return (
           <div>
-            <h3 className="font-semibold text-sm mb-3">
-              Consolidado — {wizConsolidado.length} productos ({wizConsolidado.filter(c => c.cantidad_neta > 0).length} a comprar)
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-sm">
+                Consolidado — {filtered.length} productos ({aComprar} a comprar)
+              </h3>
+            </div>
+
+            {/* Filter buttons */}
+            <div className="flex gap-2 mb-3 flex-wrap">
+              <button
+                onClick={() => setConsolidadoMinQty(0)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${consolidadoMinQty === 0 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                Todos ({wizConsolidado.length})
+              </button>
+              <button
+                onClick={() => setConsolidadoMinQty(4)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${consolidadoMinQty === 4 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                4+ piezas ({wizConsolidado.filter(c => c.cantidad_total >= 4).length})
+              </button>
+              <button
+                onClick={() => setConsolidadoMinQty(10)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${consolidadoMinQty === 10 ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              >
+                10+ piezas ({wizConsolidado.filter(c => c.cantidad_total >= 10).length})
+              </button>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -537,7 +647,7 @@ export default function CotizacionesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {wizConsolidado.map((c) => (
+                  {filtered.map((c) => (
                     <tr key={c.id} className={`border-b border-gray-100 ${c.cantidad_neta <= 0 ? 'opacity-40' : ''}`}>
                       <td className="px-3 py-2 font-medium">{c.nombre_producto}</td>
                       <td className="px-3 py-2 text-right">{c.cantidad_total}</td>
@@ -556,11 +666,12 @@ export default function CotizacionesPage() {
                 setWizRonda({ ...wizRonda, status: 'cotizando' })
                 setWizStep(3)
               }} className="w-full mt-4">
-                Enviar a cotizar
+                Enviar a cotizar {consolidadoMinQty > 0 ? `(solo ${aComprar} productos de ${consolidadoMinQty}+ pz)` : ''}
               </Btn>
             )}
           </div>
-        )}
+          )
+        })()}
 
         {/* ── STEP 3: Cotización (prices matrix) ── */}
         {wizStep === 3 && (
