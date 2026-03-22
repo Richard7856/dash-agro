@@ -964,61 +964,147 @@ export default function CotizacionesPage() {
           </div>
         )}
 
-        {/* ── STEP 5: Compras ── */}
-        {wizStep === 5 && (
+        {/* ── STEP 5: Compras (agrupado por tienda) ── */}
+        {wizStep === 5 && (() => {
+          // Group items by assigned tienda
+          const itemsConNeta = wizConsolidado.filter(c => c.cantidad_neta > 0)
+          const byTienda = new Map<string, typeof itemsConNeta>()
+          const overflowItems: { item: typeof itemsConNeta[0]; faltante: number; nextTienda: string | null; nextTiendaNombre: string }[] = []
+
+          for (const item of itemsConNeta) {
+            const tid = wizAsignacion.get(item.id)
+            if (!tid) continue
+            const arr = byTienda.get(tid) ?? []
+            arr.push(item)
+            byTienda.set(tid, arr)
+
+            // Check if partially bought → overflow
+            const comprado = wizCompras.get(`${item.id}|${tid}`) ?? 0
+            if (comprado > 0 && comprado < item.cantidad_neta) {
+              // Find 2nd best tienda
+              let secondBest: string | null = null
+              let secondPrice = Infinity
+              for (const t of tiendas) {
+                if (t.id === tid) continue
+                const p = wizPrecios.get(`${item.id}|${t.id}`)
+                if (p !== undefined && p < secondPrice) { secondPrice = p; secondBest = t.id }
+              }
+              overflowItems.push({
+                item,
+                faltante: item.cantidad_neta - comprado,
+                nextTienda: secondBest,
+                nextTiendaNombre: tiendas.find(t => t.id === secondBest)?.nombre ?? '—',
+              })
+            }
+          }
+
+          return (
           <div>
             <h3 className="font-semibold text-sm mb-3">Registro de compras</h3>
             <FotoUploader fotos={wizFotos} onChange={setWizFotos} tabla="cotizaciones" maxFotos={20} />
 
-            <div className="flex flex-col gap-2 mt-3 mb-4">
-              {wizConsolidado.filter(c => c.cantidad_neta > 0).map((item) => {
-                const assigned = wizAsignacion.get(item.id)
-                const assignedTienda = tiendas.find(t => t.id === assigned)
-                const comprado = assigned ? (wizCompras.get(`${item.id}|${assigned}`) ?? 0) : 0
-
+            {/* Groups by tienda */}
+            <div className="flex flex-col gap-4 mt-3 mb-4">
+              {tiendas.filter(t => byTienda.has(t.id)).map((tienda) => {
+                const items = byTienda.get(tienda.id) ?? []
+                const totalItems = items.length
+                const completados = items.filter(i => (wizCompras.get(`${i.id}|${tienda.id}`) ?? 0) >= i.cantidad_neta).length
                 return (
-                  <div key={item.id} className="nm-card p-3">
+                  <div key={tienda.id}>
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-medium">{item.nombre_producto}</p>
-                      <span className="text-xs text-gray-400">{assignedTienda?.nombre ?? '—'}</span>
+                      <h4 className="font-bold text-sm text-gray-800">{tienda.nombre}</h4>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                        completados === totalItems ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {completados}/{totalItems}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">Necesario: {item.cantidad_neta}</span>
-                      <input
-                        type="number" step="0.01" min="0"
-                        placeholder="Comprado"
-                        value={comprado || ''}
-                        onChange={(e) => {
-                          const num = parseFloat(e.target.value)
-                          if (!assigned) return
-                          setWizCompras((prev) => {
-                            const next = new Map(prev)
-                            if (isNaN(num) || e.target.value === '') next.delete(`${item.id}|${assigned}`)
-                            else next.set(`${item.id}|${assigned}`, num)
-                            return next
-                          })
-                        }}
-                        className={`flex-1 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          comprado > 0 && comprado < item.cantidad_neta ? 'border-amber-300 bg-amber-50' :
-                          comprado >= item.cantidad_neta ? 'border-blue-300 bg-blue-50' :
-                          'border-gray-200'
-                        }`}
-                      />
+                    <div className="flex flex-col gap-2">
+                      {items.map((item) => {
+                        const comprado = wizCompras.get(`${item.id}|${tienda.id}`) ?? 0
+                        const completo = comprado >= item.cantidad_neta
+                        const parcial = comprado > 0 && comprado < item.cantidad_neta
+                        return (
+                          <div key={item.id} className={`nm-card p-3 ${completo ? 'border-blue-200' : parcial ? 'border-amber-200' : ''}`}>
+                            <p className="text-sm font-medium mb-1">{item.nombre_producto}</p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500 shrink-0">Necesario: {item.cantidad_neta}</span>
+                              <input
+                                type="number" step="0.01" min="0"
+                                placeholder="Comprado"
+                                value={comprado || ''}
+                                onChange={(e) => {
+                                  const num = parseFloat(e.target.value)
+                                  setWizCompras((prev) => {
+                                    const next = new Map(prev)
+                                    if (isNaN(num) || e.target.value === '') next.delete(`${item.id}|${tienda.id}`)
+                                    else next.set(`${item.id}|${tienda.id}`, num)
+                                    return next
+                                  })
+                                }}
+                                className={`flex-1 px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                  completo ? 'border-blue-300 bg-blue-50' :
+                                  parcial ? 'border-amber-300 bg-amber-50' :
+                                  'border-gray-200'
+                                }`}
+                              />
+                              {completo && <span className="text-blue-600 text-sm">✓</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
-                    {comprado > 0 && comprado < item.cantidad_neta && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        Faltan {(item.cantidad_neta - comprado).toFixed(1)} — se buscará en 2da tienda
-                      </p>
-                    )}
                   </div>
                 )
               })}
+
+              {/* Overflow: faltantes que van a otra tienda */}
+              {overflowItems.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="font-bold text-sm text-amber-700">Faltantes → 2da tienda</h4>
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                      {overflowItems.length} productos
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {overflowItems.map((ov) => (
+                      <div key={`ov-${ov.item.id}`} className="nm-card p-3 border-amber-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-sm font-medium">{ov.item.nombre_producto}</p>
+                          <span className="text-xs text-amber-700 font-medium">{ov.nextTiendaNombre}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-amber-600">Faltan: {ov.faltante.toFixed(1)}</span>
+                          <input
+                            type="number" step="0.01" min="0"
+                            placeholder="Comprado en 2da"
+                            value={ov.nextTienda ? (wizCompras.get(`${ov.item.id}|${ov.nextTienda}`) ?? '') : ''}
+                            onChange={(e) => {
+                              const num = parseFloat(e.target.value)
+                              if (!ov.nextTienda) return
+                              setWizCompras((prev) => {
+                                const next = new Map(prev)
+                                if (isNaN(num) || e.target.value === '') next.delete(`${ov.item.id}|${ov.nextTienda}`)
+                                else next.set(`${ov.item.id}|${ov.nextTienda!}`, num)
+                                return next
+                              })
+                            }}
+                            className="flex-1 px-2 py-1.5 border border-amber-300 bg-amber-50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <Btn onClick={saveCompras} loading={wizSaving} className="w-full">
               Guardar compras
             </Btn>
           </div>
-        )}
+          )
+        })()}
 
         {/* ── STEP 6: Separación ── */}
         {wizStep === 6 && (
