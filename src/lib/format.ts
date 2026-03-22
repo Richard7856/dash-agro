@@ -80,6 +80,10 @@ export function generateNumeroCotizacion(): string {
   return generateFolio('COT')
 }
 
+export function generateNumeroPedido(): string {
+  return generateFolio('PED')
+}
+
 import type { StatusPago } from '@/lib/types/database.types'
 export function formatStatusPago(s: StatusPago): string {
   const labels: Record<StatusPago, string> = {

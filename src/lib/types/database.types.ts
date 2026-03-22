@@ -331,6 +331,110 @@ export interface CotizacionPrecio extends CotizacionPrecioRow {
   tiendas?: { nombre: string } | null
 }
 
+// ─── Procurement (pedidos → consolidado → cotización → compra → separación) ─
+
+export type PedidoRondaStatus = 'pedidos' | 'consolidado' | 'cotizando' | 'asignado' | 'comprando' | 'separando' | 'completado'
+
+interface PedidoRondaRow {
+  id: string
+  nombre: string | null
+  fecha: string
+  status: PedidoRondaStatus
+  notas: string | null
+  fotos: string[]
+  created_at: string
+}
+
+interface PedidoClienteRow {
+  id: string
+  ronda_id: string
+  cliente_nombre: string
+  archivo_nombre: string | null
+  created_at: string
+}
+
+interface PedidoItemRow {
+  id: string
+  pedido_cliente_id: string
+  ronda_id: string
+  nombre_producto: string
+  cantidad: number
+  precio_min: number | null
+  precio_max: number | null
+  created_at: string
+}
+
+interface ConsolidadoItemRow {
+  id: string
+  ronda_id: string
+  nombre_producto: string
+  cantidad_total: number
+  cantidad_inventario: number
+  cantidad_neta: number
+  precio_min: number | null
+  precio_max: number | null
+  inventario_registro_id: string | null
+  created_at: string
+}
+
+interface ConsolidadoPrecioRow {
+  id: string
+  consolidado_item_id: string
+  tienda_id: string
+  precio: number
+  created_at: string
+  updated_at: string
+}
+
+interface ProcCompraItemRow {
+  id: string
+  ronda_id: string
+  consolidado_item_id: string
+  tienda_id: string
+  cantidad_comprada: number
+  precio_comprado: number
+  fotos: string[]
+  created_at: string
+}
+
+interface SeparacionItemRow {
+  id: string
+  ronda_id: string
+  pedido_cliente_id: string
+  consolidado_item_id: string
+  cantidad: number
+  created_at: string
+}
+
+export interface PedidoRonda extends PedidoRondaRow {
+  pedido_clientes?: PedidoCliente[]
+}
+
+export interface PedidoCliente extends PedidoClienteRow {
+  pedido_items?: PedidoItem[]
+}
+
+export type PedidoItem = PedidoItemRow
+
+export interface ConsolidadoItem extends ConsolidadoItemRow {
+  consolidado_precios?: ConsolidadoPrecio[]
+  inventario_registros?: { nombre_producto: string; cantidad: number } | null
+}
+
+export interface ConsolidadoPrecio extends ConsolidadoPrecioRow {
+  tiendas?: { nombre: string } | null
+}
+
+export interface ProcCompraItem extends ProcCompraItemRow {
+  tiendas?: { nombre: string } | null
+  consolidado_items?: { nombre_producto: string } | null
+}
+
+export interface SeparacionItem extends SeparacionItemRow {
+  pedido_clientes?: { cliente_nombre: string } | null
+  consolidado_items?: { nombre_producto: string } | null
+}
+
 // ─── Database type para createClient<Database> ──────────────────────────────
 
 export interface Database {

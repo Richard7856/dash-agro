@@ -8,52 +8,37 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const supabase = getSupabaseServer()
 
-  // get ronda
+  // Get ronda
   const { data: ronda, error: rErr } = await supabase
-    .from('cotizacion_rondas')
-    .select('*')
-    .eq('id', id)
-    .single()
-
+    .from('pedido_rondas').select('*').eq('id', id).single()
   if (rErr || !ronda) {
     return NextResponse.json({ data: null, error: 'Ronda no encontrada' }, { status: 404 })
   }
 
-  // get productos + precios + tienda name
-  const { data: productos } = await supabase
-    .from('cotizacion_productos')
-    .select('*, cotizacion_precios(*, tiendas(nombre))')
+  // Get clientes + items
+  const { data: clientes } = await supabase
+    .from('pedido_clientes').select('*, pedido_items(*)').eq('ronda_id', id)
+
+  // Get consolidado + precios
+  const { data: consolidado } = await supabase
+    .from('consolidado_items').select('*, consolidado_precios(*, tiendas(nombre))')
+    .eq('ronda_id', id).order('nombre_producto')
+
+  // Get compras
+  const { data: compras } = await supabase
+    .from('compra_items').select('*, tiendas(nombre), consolidado_items(nombre_producto)')
     .eq('ronda_id', id)
-    .order('orden')
 
-  // get tiendas
+  // Get tiendas
   const { data: tiendas } = await supabase
-    .from('tiendas')
-    .select('id, nombre')
-    .eq('activo', true)
-    .order('nombre')
-
-  // reshape
-  const productosOut = (productos ?? []).map((p) => ({
-    id: p.id,
-    nombre_producto: p.nombre_producto,
-    orden: p.orden,
-    precio_referencia: p.precio_referencia ?? null,
-    precios: ((p as Record<string, unknown>).cotizacion_precios as Array<{
-      tienda_id: string
-      precio: number
-      tiendas: { nombre: string } | null
-    }> ?? []).map((pr) => ({
-      tienda_id: pr.tienda_id,
-      tienda_nombre: pr.tiendas?.nombre ?? '',
-      precio: pr.precio,
-    })),
-  }))
+    .from('tiendas').select('id, nombre').eq('activo', true).order('nombre')
 
   return NextResponse.json({
     data: {
       ...ronda,
-      productos: productosOut,
+      clientes: clientes ?? [],
+      consolidado: consolidado ?? [],
+      compras: compras ?? [],
       tiendas: tiendas ?? [],
     },
     error: null,
@@ -72,38 +57,36 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ data: null, error: 'JSON inválido' }, { status: 400 })
   }
 
-  const precios = body.precios as Array<{ producto_id: string; tienda_id: string; precio: number }> | undefined
-
-  if (!precios || !Array.isArray(precios) || precios.length === 0) {
-    return NextResponse.json({ data: null, error: 'precios (array de {producto_id, tienda_id, precio}) es requerido' }, { status: 400 })
-  }
-
-  // validate all producto_ids belong to this ronda
   const supabase = getSupabaseServer()
-  const { data: ronda } = await supabase
-    .from('cotizacion_rondas')
-    .select('id')
-    .eq('id', id)
-    .single()
 
+  // Verify ronda exists
+  const { data: ronda } = await supabase
+    .from('pedido_rondas').select('id').eq('id', id).single()
   if (!ronda) {
     return NextResponse.json({ data: null, error: 'Ronda no encontrada' }, { status: 404 })
   }
 
-  const upserts = precios.map((p) => ({
-    producto_id: p.producto_id,
-    tienda_id: p.tienda_id,
-    precio: p.precio,
-    updated_at: new Date().toISOString(),
-  }))
-
-  const { error: uErr } = await supabase
-    .from('cotizacion_precios')
-    .upsert(upserts, { onConflict: 'producto_id,tienda_id' })
-
-  if (uErr) {
-    return NextResponse.json({ data: null, error: uErr.message }, { status: 400 })
+  // Update precios if provided
+  const precios = body.precios as Array<{ consolidado_item_id: string; tienda_id: string; precio: number }> | undefined
+  if (precios && Array.isArray(precios) && precios.length > 0) {
+    const upserts = precios.map((p) => ({
+      consolidado_item_id: p.consolidado_item_id,
+      tienda_id: p.tienda_id,
+      precio: p.precio,
+      updated_at: new Date().toISOString(),
+    }))
+    const { error: uErr } = await supabase
+      .from('consolidado_precios')
+      .upsert(upserts, { onConflict: 'consolidado_item_id,tienda_id' })
+    if (uErr) {
+      return NextResponse.json({ data: null, error: uErr.message }, { status: 400 })
+    }
   }
 
-  return NextResponse.json({ data: { updated: upserts.length }, error: null })
+  // Update status if provided
+  if (body.status) {
+    await supabase.from('pedido_rondas').update({ status: body.status as string }).eq('id', id)
+  }
+
+  return NextResponse.json({ data: { updated: true }, error: null })
 }
