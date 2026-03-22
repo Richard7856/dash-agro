@@ -72,6 +72,7 @@ export default function CotizacionesPage() {
   const [consolidadoMinQty, setConsolidadoMinQty] = useState(0) // 0 = show all
   const [cotBusqueda, setCotBusqueda] = useState('')
   const [cotFiltro, setCotFiltro] = useState<'todos' | 'sin_precio' | 'completos'>('todos')
+  const [pricesSaved, setPricesSaved] = useState(false)
   const [wizConsolidado, setWizConsolidado] = useState<ConsolidadoItem[]>([])
   const [wizPrecios, setWizPrecios] = useState<Map<string, number>>(new Map())
   const [wizAsignacion, setWizAsignacion] = useState<Map<string, string>>(new Map()) // consolidadoItemId → tiendaId
@@ -378,6 +379,8 @@ export default function CotizacionesPage() {
     setWizRonda({ ...wizRonda, status: 'cotizando' })
     setWizSaving(false)
     setError('')
+    setPricesSaved(true)
+    setTimeout(() => setPricesSaved(false), 3000)
   }
 
   // ─── Step 4: Auto-assign best price ───────────────────────────────────────
@@ -664,10 +667,24 @@ export default function CotizacionesPage() {
             </div>
             {isAdmin && (
               <Btn onClick={async () => {
+                setWizSaving(true)
+                // If filter is active, delete items below threshold
+                if (consolidadoMinQty > 0) {
+                  const toDelete = wizConsolidado.filter(c => c.cantidad_total < consolidadoMinQty)
+                  for (const item of toDelete) {
+                    await supabase.from('consolidado_items').delete().eq('id', item.id)
+                  }
+                }
                 await supabase.from('pedido_rondas').update({ status: 'cotizando' }).eq('id', wizRonda.id)
                 setWizRonda({ ...wizRonda, status: 'cotizando' })
+                // Reload consolidado without deleted items
+                const { data: fresh } = await supabase
+                  .from('consolidado_items').select('*, consolidado_precios(*, tiendas(nombre))')
+                  .eq('ronda_id', wizRonda.id).order('cantidad_total', { ascending: false })
+                setWizConsolidado((fresh ?? []) as ConsolidadoItem[])
+                setWizSaving(false)
                 setWizStep(3)
-              }} className="w-full mt-4">
+              }} loading={wizSaving} className="w-full mt-4">
                 Enviar a cotizar {consolidadoMinQty > 0 ? `(solo ${aComprar} productos de ${consolidadoMinQty}+ pz)` : ''}
               </Btn>
             )}
@@ -777,8 +794,8 @@ export default function CotizacionesPage() {
                                   })
                                 }}
                                 className={`w-full text-center px-2 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                                  outOfRange ? 'bg-red-50 border-red-300 text-red-600 font-semibold' :
                                   isBest ? 'bg-blue-50 border-blue-300 font-semibold text-blue-700' :
-                                  outOfRange ? 'bg-red-50 border-red-300 text-red-600' :
                                   'border-gray-200'
                                 }`}
                               />
@@ -843,7 +860,14 @@ export default function CotizacionesPage() {
               })}
             </div>
 
-            <Btn onClick={savePrices} loading={wizSaving} className="w-full">Guardar precios</Btn>
+            {pricesSaved && (
+              <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 font-medium text-center">
+                ✓ Precios guardados correctamente
+              </div>
+            )}
+            <Btn onClick={savePrices} loading={wizSaving} className="w-full">
+              {pricesSaved ? '✓ Guardado' : 'Guardar precios'}
+            </Btn>
           </div>
           )
         })()}
