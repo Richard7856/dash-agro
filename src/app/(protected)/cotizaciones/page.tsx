@@ -79,6 +79,8 @@ export default function CotizacionesPage() {
   const [wizAsignacion, setWizAsignacion] = useState<Map<string, string>>(new Map()) // consolidadoItemId → tiendaId
   const [wizCompras, setWizCompras] = useState<Map<string, number>>(new Map()) // "consolidadoId|tiendaId" → qty
   const [wizSeparacion, setWizSeparacion] = useState<SeparacionItem[]>([])
+  const [cotUploadPreview, setCotUploadPreview] = useState<{ producto: string; tienda: string; precio: number }[] | null>(null)
+  const [cotUploading, setCotUploading] = useState(false)
   const [wizFotos, setWizFotos] = useState<string[]>([])
   const [wizSaving, setWizSaving] = useState(false)
 
@@ -819,6 +821,76 @@ export default function CotizacionesPage() {
           return (
           <div>
             <h3 className="font-semibold text-sm mb-3">Cotización — Precios por tienda</h3>
+
+            {/* Upload Excel de precios */}
+            <div className="mb-3 p-3 border border-dashed border-gray-300 rounded-xl bg-gray-50">
+              <p className="text-xs font-medium text-gray-600 mb-2">Subir hoja de precios (.xlsx)</p>
+              {cotUploadPreview ? (
+                <div>
+                  <p className="text-xs text-blue-600 font-medium mb-2">
+                    {cotUploadPreview.length} precios encontrados. ¿Aplicar?
+                  </p>
+                  <div className="max-h-40 overflow-y-auto mb-2">
+                    <table className="w-full text-xs">
+                      <thead><tr className="bg-gray-100"><th className="px-2 py-1 text-left">Producto</th><th className="px-2 py-1 text-left">Tienda</th><th className="px-2 py-1 text-right">Precio</th></tr></thead>
+                      <tbody>
+                        {cotUploadPreview.slice(0, 20).map((p, i) => (
+                          <tr key={i} className="border-b border-gray-100">
+                            <td className="px-2 py-1 truncate max-w-[150px]">{p.producto}</td>
+                            <td className="px-2 py-1">{p.tienda}</td>
+                            <td className="px-2 py-1 text-right">{formatMxn(p.precio)}</td>
+                          </tr>
+                        ))}
+                        {cotUploadPreview.length > 20 && <tr><td colSpan={3} className="px-2 py-1 text-gray-400 text-center">...y {cotUploadPreview.length - 20} más</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setCotUploadPreview(null)} className="flex-1 py-1.5 text-xs font-medium bg-gray-200 hover:bg-gray-300 rounded-lg">Cancelar</button>
+                    <button onClick={() => {
+                      // Match prices to consolidado items and tiendas
+                      const newPrecios = new Map(wizPrecios)
+                      let matched = 0
+                      for (const p of cotUploadPreview) {
+                        const prodNorm = p.producto.trim().toLowerCase()
+                        const tiendaNorm = p.tienda.trim().toLowerCase()
+                        const ci = wizConsolidado.find(c => c.nombre_producto.trim().toLowerCase() === prodNorm)
+                        const t = tiendas.find(t => t.nombre.trim().toLowerCase() === tiendaNorm)
+                        if (ci && t) {
+                          newPrecios.set(`${ci.id}|${t.id}`, p.precio)
+                          matched++
+                        }
+                      }
+                      setWizPrecios(newPrecios)
+                      setCotUploadPreview(null)
+                      setError(matched > 0 ? '' : 'No se pudo emparejar ningún precio con productos/tiendas existentes')
+                      if (matched > 0) { setPricesSaved(false) }
+                    }} className="flex-1 py-1.5 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 rounded-lg">
+                      Aplicar {cotUploadPreview.length} precios
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="block cursor-pointer">
+                  <div className={`py-3 border border-dashed rounded-lg text-center text-xs transition-colors ${cotUploading ? 'border-blue-300 bg-blue-50 text-blue-600' : 'border-gray-300 text-gray-400 hover:border-blue-300 hover:text-blue-500'}`}>
+                    {cotUploading ? 'Procesando...' : 'Seleccionar archivo Excel con precios por tienda'}
+                  </div>
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    setCotUploading(true)
+                    const fd = new FormData()
+                    fd.append('file', file)
+                    const res = await fetch('/api/v1/cotizaciones/upload-precios', { method: 'POST', body: fd })
+                    const json = await res.json()
+                    setCotUploading(false)
+                    if (!res.ok) { setError(json.error); return }
+                    setCotUploadPreview(json.data)
+                    e.target.value = ''
+                  }} />
+                </label>
+              )}
+            </div>
 
             <FotoUploader fotos={wizFotos} onChange={setWizFotos} tabla="cotizaciones" maxFotos={10} />
 
