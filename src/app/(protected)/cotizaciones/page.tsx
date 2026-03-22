@@ -300,7 +300,7 @@ export default function CotizacionesPage() {
     // Reload consolidado
     const { data: fresh } = await supabase
       .from('consolidado_items').select('*, consolidado_precios(*, tiendas(nombre))')
-      .eq('ronda_id', wizRonda.id).order('nombre_producto')
+      .eq('ronda_id', wizRonda.id).order('cantidad_total', { ascending: false })
     setWizConsolidado((fresh ?? []) as ConsolidadoItem[])
   }
 
