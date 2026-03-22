@@ -70,6 +70,8 @@ export default function CotizacionesPage() {
   const [wizAddUploading, setWizAddUploading] = useState(false)
   const [wizAddSaving, setWizAddSaving] = useState(false)
   const [consolidadoMinQty, setConsolidadoMinQty] = useState(0) // 0 = show all
+  const [cotBusqueda, setCotBusqueda] = useState('')
+  const [cotFiltro, setCotFiltro] = useState<'todos' | 'sin_precio' | 'completos'>('todos')
   const [wizConsolidado, setWizConsolidado] = useState<ConsolidadoItem[]>([])
   const [wizPrecios, setWizPrecios] = useState<Map<string, number>>(new Map())
   const [wizAsignacion, setWizAsignacion] = useState<Map<string, string>>(new Map()) // consolidadoItemId → tiendaId
@@ -674,15 +676,61 @@ export default function CotizacionesPage() {
         })()}
 
         {/* ── STEP 3: Cotización (prices matrix) ── */}
-        {wizStep === 3 && (
+        {wizStep === 3 && (() => {
+          const cotizableItems = wizConsolidado.filter(c => c.cantidad_neta > 0)
+          // Count missing prices per product
+          const missingCount = (itemId: string) => tiendas.filter(t => !wizPrecios.has(`${itemId}|${t.id}`)).length
+          const totalCompletos = cotizableItems.filter(i => missingCount(i.id) === 0).length
+          const totalSinPrecio = cotizableItems.filter(i => missingCount(i.id) > 0).length
+
+          // Apply filters
+          let cotFiltered = cotizableItems
+          if (cotBusqueda.trim()) {
+            const q = cotBusqueda.toLowerCase()
+            cotFiltered = cotFiltered.filter(i => i.nombre_producto.toLowerCase().includes(q))
+          }
+          if (cotFiltro === 'sin_precio') cotFiltered = cotFiltered.filter(i => missingCount(i.id) > 0)
+          if (cotFiltro === 'completos') cotFiltered = cotFiltered.filter(i => missingCount(i.id) === 0)
+
+          return (
           <div>
             <h3 className="font-semibold text-sm mb-3">Cotización — Precios por tienda</h3>
 
             <FotoUploader fotos={wizFotos} onChange={setWizFotos} tabla="cotizaciones" maxFotos={10} />
 
-            <div className="flex flex-wrap gap-2 my-3 text-[10px] text-gray-500">
+            {/* Search + filter */}
+            <div className="flex flex-col gap-2 my-3">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+                </svg>
+                <input
+                  type="text" placeholder="Buscar producto..."
+                  value={cotBusqueda}
+                  onChange={(e) => setCotBusqueda(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button onClick={() => setCotFiltro('todos')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${cotFiltro === 'todos' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  Todos ({cotizableItems.length})
+                </button>
+                <button onClick={() => setCotFiltro('sin_precio')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${cotFiltro === 'sin_precio' ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  Sin precio ({totalSinPrecio})
+                </button>
+                <button onClick={() => setCotFiltro('completos')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${cotFiltro === 'completos' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                  Completos ({totalCompletos})
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-3 text-[10px] text-gray-500">
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-50 border border-blue-300" /> Mejor</span>
               <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-50 border border-red-300" /> Fuera de rango</span>
+              <span className="text-gray-400 ml-auto">{cotFiltered.length} de {cotizableItems.length} productos</span>
             </div>
 
             {/* Desktop table */}
@@ -698,7 +746,7 @@ export default function CotizacionesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {wizConsolidado.filter(c => c.cantidad_neta > 0).map((item) => {
+                  {cotFiltered.map((item) => {
                     const best = bestTiendaFor(item.id)
                     return (
                       <tr key={item.id} className="border-b border-gray-100">
@@ -746,7 +794,7 @@ export default function CotizacionesPage() {
 
             {/* Mobile cards */}
             <div className="md:hidden flex flex-col gap-3 mb-4">
-              {wizConsolidado.filter(c => c.cantidad_neta > 0).map((item) => {
+              {cotFiltered.map((item) => {
                 const best = bestTiendaFor(item.id)
                 return (
                   <div key={item.id} className="nm-card p-4">
@@ -797,7 +845,8 @@ export default function CotizacionesPage() {
 
             <Btn onClick={savePrices} loading={wizSaving} className="w-full">Guardar precios</Btn>
           </div>
-        )}
+          )
+        })()}
 
         {/* ── STEP 4: Asignación ── */}
         {wizStep === 4 && (
