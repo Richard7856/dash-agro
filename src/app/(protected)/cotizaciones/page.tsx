@@ -389,9 +389,24 @@ export default function CotizacionesPage() {
         .upsert(upserts, { onConflict: 'consolidado_item_id,tienda_id' })
       if (err) { setError(err.message); setWizSaving(false); return }
     }
-    // Save fotos
+    // Save fotos + update status
     await supabase.from('pedido_rondas').update({ status: 'cotizando', fotos: wizFotos }).eq('id', wizRonda.id)
     setWizRonda({ ...wizRonda, status: 'cotizando' })
+
+    // Reload precios from DB to ensure consistency
+    const { data: freshCons } = await supabase
+      .from('consolidado_items').select('*, consolidado_precios(*, tiendas(nombre))')
+      .eq('ronda_id', wizRonda.id).order('cantidad_total', { ascending: false })
+    const fresh = (freshCons ?? []) as ConsolidadoItem[]
+    setWizConsolidado(fresh)
+    const newPMap = new Map<string, number>()
+    for (const c of fresh) {
+      for (const p of c.consolidado_precios ?? []) {
+        newPMap.set(`${c.id}|${p.tienda_id}`, p.precio)
+      }
+    }
+    setWizPrecios(newPMap)
+
     setWizSaving(false)
     setError('')
     setPricesSaved(true)
@@ -423,9 +438,21 @@ export default function CotizacionesPage() {
     setError('')
     setWizSaving(true)
 
-    // Auto-assign any unassigned items first
-    if (wizAsignacion.size === 0) {
-      autoAssign()
+    // Build assignment map (use existing or auto-assign)
+    let assignMap = wizAsignacion
+    if (assignMap.size === 0) {
+      assignMap = new Map<string, string>()
+      for (const item of wizConsolidado) {
+        if (item.cantidad_neta <= 0) continue
+        let bestTienda: string | null = null
+        let bestPrice = Infinity
+        for (const t of tiendas) {
+          const p = wizPrecios.get(`${item.id}|${t.id}`)
+          if (p !== undefined && p < bestPrice) { bestPrice = p; bestTienda = t.id }
+        }
+        if (bestTienda) assignMap.set(item.id, bestTienda)
+      }
+      setWizAsignacion(assignMap)
     }
 
     // Delete old compra_items
@@ -434,7 +461,7 @@ export default function CotizacionesPage() {
 
     // Insert assignments
     const inserts: { ronda_id: string; consolidado_item_id: string; tienda_id: string; cantidad_comprada: number; precio_comprado: number }[] = []
-    wizAsignacion.forEach((tiendaId, consolidadoId) => {
+    assignMap.forEach((tiendaId, consolidadoId) => {
       const precio = wizPrecios.get(`${consolidadoId}|${tiendaId}`) ?? 0
       inserts.push({
         ronda_id: wizRonda.id,
@@ -467,46 +494,27 @@ export default function CotizacionesPage() {
     setWizSaving(true)
     setError('')
 
-    // Separate primary (already in compra_items) from overflow (new rows)
-    const primaryTiendas = new Set<string>()
-    wizAsignacion.forEach((tiendaId, consolidadoId) => {
-      primaryTiendas.add(`${consolidadoId}|${tiendaId}`)
-    })
+    // Delete all existing compra_items and re-insert with current quantities
+    await supabase.from('compra_items').delete().eq('ronda_id', wizRonda.id)
 
-    const updates: { consolidadoId: string; tiendaId: string; qty: number }[] = []
     const inserts: { ronda_id: string; consolidado_item_id: string; tienda_id: string; cantidad_comprada: number; precio_comprado: number }[] = []
 
     wizCompras.forEach((qty, key) => {
+      if (qty <= 0) return
       const [consolidadoId, tiendaId] = key.split('|')
-      if (primaryTiendas.has(key)) {
-        updates.push({ consolidadoId, tiendaId, qty })
-      } else {
-        // Overflow: new compra_item
-        const precio = wizPrecios.get(key) ?? 0
-        inserts.push({
-          ronda_id: wizRonda.id,
-          consolidado_item_id: consolidadoId,
-          tienda_id: tiendaId,
-          cantidad_comprada: qty,
-          precio_comprado: precio,
-        })
-      }
+      const precio = wizPrecios.get(key) ?? 0
+      inserts.push({
+        ronda_id: wizRonda.id,
+        consolidado_item_id: consolidadoId,
+        tienda_id: tiendaId,
+        cantidad_comprada: qty,
+        precio_comprado: precio,
+      })
     })
 
-    // Update existing
-    for (const u of updates) {
-      const { error: uErr } = await supabase.from('compra_items')
-        .update({ cantidad_comprada: u.qty })
-        .eq('ronda_id', wizRonda.id)
-        .eq('consolidado_item_id', u.consolidadoId)
-        .eq('tienda_id', u.tiendaId)
-      if (uErr) { setError(`Error actualizando: ${uErr.message}`); setWizSaving(false); return }
-    }
-
-    // Insert overflow
     if (inserts.length > 0) {
       const { error: iErr } = await supabase.from('compra_items').insert(inserts)
-      if (iErr) { setError(`Error guardando overflow: ${iErr.message}`); setWizSaving(false); return }
+      if (iErr) { setError(`Error guardando compras: ${iErr.message}`); setWizSaving(false); return }
     }
 
     await supabase.from('pedido_rondas').update({ status: 'comprando', fotos: wizFotos }).eq('id', wizRonda.id)
@@ -688,6 +696,25 @@ export default function CotizacionesPage() {
               <h3 className="font-semibold text-sm">
                 Consolidado — {filtered.length} productos ({aComprar} a comprar)
               </h3>
+              <button onClick={() => {
+                import('xlsx').then(XLSX => {
+                  const data = filtered.map(c => ({
+                    Producto: c.nombre_producto,
+                    Total: c.cantidad_total,
+                    Stock: c.cantidad_inventario,
+                    Neto: c.cantidad_neta,
+                    'Precio Min': c.precio_min ?? '',
+                    'Precio Max': c.precio_max ?? '',
+                  }))
+                  const ws = XLSX.utils.json_to_sheet(data)
+                  const wb = XLSX.utils.book_new()
+                  XLSX.utils.book_append_sheet(wb, ws, 'Consolidado')
+                  XLSX.writeFile(wb, `consolidado-${wizRonda?.nombre ?? 'pedido'}.xlsx`)
+                })
+              }} className="text-xs text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12l7 7 7-7" /></svg>
+                XLS
+              </button>
             </div>
 
             {/* Filter buttons */}
@@ -744,19 +771,15 @@ export default function CotizacionesPage() {
                 setError('')
                 // If filter is active, delete items below threshold
                 if (consolidadoMinQty > 0) {
-                  const idsToDelete = wizConsolidado
-                    .filter(c => Number(c.cantidad_total) < consolidadoMinQty)
-                    .map(c => c.id)
-                  if (idsToDelete.length > 0) {
-                    const { error: delErr } = await supabase
-                      .from('consolidado_items')
-                      .delete()
-                      .in('id', idsToDelete)
-                    if (delErr) {
-                      setError(`Error eliminando productos: ${delErr.message}`)
-                      setWizSaving(false)
-                      return
-                    }
+                  const { error: delErr } = await supabase
+                    .from('consolidado_items')
+                    .delete()
+                    .eq('ronda_id', wizRonda.id)
+                    .lt('cantidad_total', consolidadoMinQty)
+                  if (delErr) {
+                    setError(`Error eliminando productos: ${delErr.message}`)
+                    setWizSaving(false)
+                    return
                   }
                 }
                 await supabase.from('pedido_rondas').update({ status: 'cotizando' }).eq('id', wizRonda.id)

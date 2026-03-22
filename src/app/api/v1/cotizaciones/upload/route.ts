@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
     const findCol = (keywords: string[]) =>
       headers.find((h) => keywords.some((k) => norm(h).includes(k))) ?? null
 
-    const colProducto = findCol(['descripcion', 'producto', 'nombre', 'articulo', 'item'])
-    const colCantidad = findCol(['ped', 'cantidad', 'qty', 'piezas', 'unidades'])
+    const colProducto = findCol(['descripcion', 'desc', 'producto', 'nombre', 'articulo', 'item'])
+    const colCantidad = findCol(['ped', 'cantidad', 'qty', 'piezas', 'unidades', 'cant'])
 
     // Handle duplicate "COSTO MAXIMO" columns: first occurrence = min, second = max
     const costoHeaders = headers.filter((h) => norm(h).includes('costo'))
