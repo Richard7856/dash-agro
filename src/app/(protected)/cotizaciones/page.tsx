@@ -669,9 +669,9 @@ export default function CotizacionesPage() {
                 ) : (
                   <label className="block cursor-pointer">
                     <div className={`py-4 border-2 border-dashed rounded-xl text-center text-sm transition-colors ${wizAddUploading ? 'border-blue-300 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-blue-300'}`}>
-                      {wizAddUploading ? 'Procesando...' : 'Subir archivo Excel (.xlsx)'}
+                      {wizAddUploading ? 'Procesando...' : 'Subir archivo (.xlsx, .pdf, imagen)'}
                     </div>
-                    <input type="file" accept=".xlsx,.xls" className="hidden"
+                    <input type="file" accept=".xlsx,.xls,.pdf,.jpg,.jpeg,.png,.webp" className="hidden"
                       onChange={(e) => { if (e.target.files?.[0]) wizHandleFileUpload(e.target.files[0]) }} />
                   </label>
                 )}
@@ -873,9 +873,9 @@ export default function CotizacionesPage() {
               ) : (
                 <label className="block cursor-pointer">
                   <div className={`py-3 border border-dashed rounded-lg text-center text-xs transition-colors ${cotUploading ? 'border-blue-300 bg-blue-50 text-blue-600' : 'border-gray-300 text-gray-400 hover:border-blue-300 hover:text-blue-500'}`}>
-                    {cotUploading ? 'Procesando...' : 'Seleccionar archivo Excel con precios por tienda'}
+                    {cotUploading ? 'Procesando...' : 'Subir archivo de precios (.xlsx, .pdf, imagen)'}
                   </div>
-                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={async (e) => {
+                  <input type="file" accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
                     setCotUploading(true)
@@ -1398,9 +1398,9 @@ export default function CotizacionesPage() {
                 ) : (
                   <label className="block cursor-pointer">
                     <div className={`py-6 border-2 border-dashed rounded-xl text-center text-sm transition-colors ${uploadingIdx === idx ? 'border-blue-300 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-400 hover:border-blue-300'}`}>
-                      {uploadingIdx === idx ? 'Procesando...' : 'Subir archivo Excel (.xlsx)'}
+                      {uploadingIdx === idx ? 'Procesando...' : 'Subir archivo (.xlsx, .pdf, imagen)'}
                     </div>
-                    <input type="file" accept=".xlsx,.xls" className="hidden"
+                    <input type="file" accept=".xlsx,.xls,.pdf,.jpg,.jpeg,.png,.webp" className="hidden"
                       onChange={(e) => { if (e.target.files?.[0]) handleFileUpload(idx, e.target.files[0]) }} />
                   </label>
                 )}
