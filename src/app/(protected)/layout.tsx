@@ -13,7 +13,7 @@ import type { User } from '@supabase/supabase-js'
 import type { UserProfile } from '@/lib/types/database.types'
 
 /** Routes a cotizador is allowed to visit */
-const COTIZADOR_ALLOWED = ['/cotizaciones']
+const COTIZADOR_ALLOWED = ['/cotizaciones', '/tickets']
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()

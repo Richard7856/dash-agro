@@ -436,6 +436,44 @@ export interface SeparacionItem extends SeparacionItemRow {
   consolidado_items?: { nombre_producto: string } | null
 }
 
+// ─── Ticket Análisis ─────────────────────────────────────────────────────────
+
+export type TicketStatus = 'pendiente' | 'revisado' | 'autorizado' | 'guardado'
+
+interface TicketAnalisisRow {
+  id: string
+  foto_url: string
+  tienda_detectada: string | null
+  fecha_ticket: string | null
+  subtotal: number | null
+  iva: number | null
+  total: number | null
+  metodo_pago: string | null
+  status: TicketStatus
+  notas: string | null
+  created_by: string | null
+  authorized_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface TicketItemRow {
+  id: string
+  ticket_id: string
+  descripcion: string
+  cantidad: number
+  precio_unitario: number
+  total: number
+  created_at: string
+}
+
+export interface TicketAnalisis extends TicketAnalisisRow {
+  ticket_items?: TicketItem[]
+  user_profiles?: { nombre: string; email: string } | null
+}
+
+export type TicketItem = TicketItemRow
+
 // ─── Database type para createClient<Database> ──────────────────────────────
 
 export interface Database {
