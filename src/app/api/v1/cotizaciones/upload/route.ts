@@ -4,8 +4,9 @@ import Anthropic from '@anthropic-ai/sdk'
 
 /**
  * POST /api/v1/cotizaciones/upload
- * Accepts multipart form with Excel (.xlsx/.xls) or PDF file
+ * Accepts multipart form with Excel (.xlsx/.xls), PDF, or image
  * Returns parsed rows: { producto, cantidad, precio_min, precio_max }[]
+ * Also returns tiendas_precios if the sheet has price columns per tienda.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -24,13 +25,33 @@ export async function POST(req: NextRequest) {
       return parsePdfOrImage(file, isPdf)
     }
 
-    // Excel/CSV path
     return parseExcel(file)
   } catch (err) {
     return NextResponse.json({
       error: `Error procesando archivo: ${err instanceof Error ? err.message : 'desconocido'}`,
     }, { status: 500 })
   }
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const norm = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+
+function findCol(headers: string[], keywords: string[]): string | null {
+  return headers.find((h) => keywords.some((k) => norm(h).includes(k))) ?? null
+}
+
+// Known column keywords (not tienda names)
+const KNOWN_COL_KEYWORDS = [
+  'articulo', 'art', 'descripcion', 'desc', 'producto', 'nombre', 'item',
+  'ped', 'cantidad', 'qty', 'piezas', 'unidades', 'cant', 'total',
+  'precio', 'costo', 'min', 'max', 'minimo', 'maximo',
+]
+
+function isKnownColumn(header: string): boolean {
+  const n = norm(header)
+  return KNOWN_COL_KEYWORDS.some((k) => n.includes(k)) || n.startsWith('__empty')
 }
 
 // ─── Excel parser ─────────────────────────────────────────────────────────────
@@ -44,36 +65,80 @@ async function parseExcel(file: File) {
     return NextResponse.json({ error: 'El archivo no tiene hojas de cálculo' }, { status: 400 })
   }
 
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-
-  if (rawRows.length === 0) {
+  // Read raw (header: 1) to detect if row 0 is a meta-header (e.g., client names)
+  const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' })
+  if (allRows.length < 2) {
     return NextResponse.json({ error: 'El archivo está vacío' }, { status: 400 })
   }
 
-  const headers = Object.keys(rawRows[0])
-  const norm = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim()
+  // Detect if row 0 is a meta-header by checking if row 1 looks like actual headers
+  let headerRow: string[]
+  let dataStartIdx: number
 
-  const findCol = (keywords: string[]) =>
-    headers.find((h) => keywords.some((k) => norm(h).includes(k))) ?? null
+  const row0 = (allRows[0] as unknown[]).map(String)
+  const row1 = (allRows[1] as unknown[]).map(String)
 
-  const colProducto = findCol(['descripcion', 'desc', 'producto', 'nombre', 'articulo', 'item'])
-  const colCantidad = findCol(['ped', 'cantidad', 'qty', 'piezas', 'unidades', 'cant'])
+  const row0HasDescripcion = row0.some((c) => ['descripcion', 'desc', 'producto', 'nombre'].some((k) => norm(String(c)).includes(k)))
+  const row1HasDescripcion = row1.some((c) => ['descripcion', 'desc', 'producto', 'nombre'].some((k) => norm(String(c)).includes(k)))
 
-  // Handle duplicate "COSTO MAXIMO" columns
-  const costoHeaders = headers.filter((h) => norm(h).includes('costo'))
+  if (!row0HasDescripcion && row1HasDescripcion) {
+    // Row 0 is meta (client names above PED columns), row 1 is the real header
+    headerRow = row1
+    dataStartIdx = 2
+  } else {
+    // Row 0 is the header
+    headerRow = row0
+    dataStartIdx = 1
+  }
+
+  // Build data rows as objects keyed by headerRow
+  const dataRows: Record<string, unknown>[] = []
+  for (let i = dataStartIdx; i < allRows.length; i++) {
+    const raw = allRows[i] as unknown[]
+    const obj: Record<string, unknown> = {}
+    for (let j = 0; j < headerRow.length; j++) {
+      const key = headerRow[j] || `_col_${j}`
+      obj[key] = raw[j] ?? ''
+    }
+    dataRows.push(obj)
+  }
+
+  if (dataRows.length === 0) {
+    return NextResponse.json({ error: 'No hay datos en el archivo' }, { status: 400 })
+  }
+
+  const headers = headerRow.filter(h => h && !h.startsWith('_col_'))
+
+  // Find core columns
+  const colProducto = findCol(headers, ['descripcion', 'desc', 'producto', 'nombre', 'articulo', 'item'])
+  const colTotal = findCol(headers, ['total'])
+
+  // Find PED columns: could be multiple (one per client) or single
+  const pedCols = headers.filter((h) => norm(h) === 'ped' || norm(h).includes('cantidad') || norm(h).includes('qty'))
+  const colCantidad = colTotal ?? (pedCols.length === 1 ? pedCols[0] : null)
+
+  // If multiple PED columns and TOTAL exists, use TOTAL for cantidad
+  // Otherwise sum PED columns
+
+  // Find price columns
+  const precioHeaders = headers.filter((h) => norm(h).includes('precio') || norm(h).includes('costo'))
   let colPrecioMin: string | null = null
   let colPrecioMax: string | null = null
 
-  if (costoHeaders.length >= 2) {
-    colPrecioMin = costoHeaders[0]
-    colPrecioMax = costoHeaders[1]
-  } else if (costoHeaders.length === 1) {
-    colPrecioMin = costoHeaders[0]
-    colPrecioMax = costoHeaders[0]
-  } else {
-    colPrecioMin = findCol(['precio_min', 'min', 'minimo', 'precio minimo', 'pmin'])
-    colPrecioMax = findCol(['precio_max', 'max', 'maximo', 'precio maximo', 'pmax'])
+  if (precioHeaders.length >= 2) {
+    // Sort: the one with "min" first, then "max"
+    const minCol = precioHeaders.find((h) => norm(h).includes('min'))
+    const maxCol = precioHeaders.find((h) => norm(h).includes('max'))
+    if (minCol && maxCol) {
+      colPrecioMin = minCol
+      colPrecioMax = maxCol
+    } else {
+      colPrecioMin = precioHeaders[0]
+      colPrecioMax = precioHeaders[1]
+    }
+  } else if (precioHeaders.length === 1) {
+    colPrecioMin = precioHeaders[0]
+    colPrecioMax = precioHeaders[0]
   }
 
   if (!colProducto) {
@@ -82,17 +147,56 @@ async function parseExcel(file: File) {
     }, { status: 400 })
   }
 
-  const rows = rawRows
+  // Detect tienda columns: columns after PRECIO MAX that are not known keywords
+  // These are columns that might have tienda names (Inspector, Zorro, Sahuayo, PROMOTORA, etc.)
+  const precioMaxIdx = colPrecioMax ? headers.indexOf(colPrecioMax) : -1
+  const tiendaColumns: string[] = []
+  if (precioMaxIdx >= 0) {
+    for (let i = precioMaxIdx + 1; i < headers.length; i++) {
+      if (!isKnownColumn(headers[i]) && headers[i].trim().length > 0) {
+        tiendaColumns.push(headers[i])
+      }
+    }
+  }
+
+  // Parse rows
+  const rows = dataRows
     .filter((r) => {
       const prod = String(r[colProducto] ?? '').trim()
-      return prod.length > 0
+      return prod.length > 0 && prod !== 'Articulo' && prod !== 'Descripción'
     })
-    .map((r) => ({
-      producto: String(r[colProducto] ?? '').trim(),
-      cantidad: colCantidad ? parseFloat(String(r[colCantidad])) || 0 : 0,
-      precio_min: colPrecioMin ? parseFloat(String(r[colPrecioMin])) || null : null,
-      precio_max: colPrecioMax ? parseFloat(String(r[colPrecioMax])) || null : null,
-    }))
+    .map((r) => {
+      // Calculate cantidad
+      let cantidad = 0
+      if (colTotal && r[colTotal] !== undefined && r[colTotal] !== '') {
+        cantidad = parseFloat(String(r[colTotal])) || 0
+      } else if (pedCols.length > 0) {
+        // Sum all PED columns
+        cantidad = pedCols.reduce((sum, col) => sum + (parseFloat(String(r[col])) || 0), 0)
+      } else if (colCantidad) {
+        cantidad = parseFloat(String(r[colCantidad])) || 0
+      }
+
+      const precioMinVal = colPrecioMin ? parseFloat(String(r[colPrecioMin])) || null : null
+      const precioMaxVal = colPrecioMax ? parseFloat(String(r[colPrecioMax])) || null : null
+
+      // Extract tienda prices if present
+      const tiendaPrecios: Record<string, number> = {}
+      for (const tc of tiendaColumns) {
+        const val = parseFloat(String(r[tc]))
+        if (!isNaN(val) && val > 0) {
+          tiendaPrecios[tc.trim()] = val
+        }
+      }
+
+      return {
+        producto: String(r[colProducto] ?? '').trim(),
+        cantidad,
+        precio_min: precioMinVal,
+        precio_max: precioMaxVal,
+        ...(Object.keys(tiendaPrecios).length > 0 ? { tienda_precios: tiendaPrecios } : {}),
+      }
+    })
     .map((r) => {
       if (r.precio_min != null && r.precio_max != null && r.precio_min > r.precio_max) {
         return { ...r, precio_min: r.precio_max, precio_max: r.precio_min }
@@ -100,10 +204,26 @@ async function parseExcel(file: File) {
       return r
     })
 
+  // If we found tienda columns, also include the detected client names from row 0
+  const clientNames: string[] = []
+  if (!row0HasDescripcion && row1HasDescripcion) {
+    // Row 0 has client names above PED columns
+    for (const cell of row0) {
+      const s = String(cell).trim()
+      if (s && s !== '' && !s.startsWith('__')) clientNames.push(s)
+    }
+  }
+
   return NextResponse.json({
     data: rows,
-    meta: { filename: file.name, total_rows: rows.length, source: 'excel',
-      columns_detected: { colProducto, colCantidad, colPrecioMin, colPrecioMax } },
+    meta: {
+      filename: file.name,
+      total_rows: rows.length,
+      source: 'excel',
+      columns_detected: { colProducto, colCantidad: colTotal ?? colCantidad, colPrecioMin, colPrecioMax },
+      tienda_columns: tiendaColumns.length > 0 ? tiendaColumns : undefined,
+      client_names: clientNames.length > 0 ? clientNames : undefined,
+    },
     error: null,
   })
 }
@@ -142,15 +262,16 @@ async function parsePdfOrImage(file: File, isPdf: boolean) {
 
 Para cada producto extrae:
 - producto: nombre/descripción del producto (string)
-- cantidad: cantidad pedida (number, si no se ve pon 0)
-- precio_min: precio mínimo o costo mínimo (number o null si no existe)
-- precio_max: precio máximo o costo máximo (number o null si no existe)
+- cantidad: cantidad pedida o total (number, si no se ve pon 0)
+- precio_min: precio mínimo o costo mínimo (number o null)
+- precio_max: precio máximo o costo máximo (number o null)
+- tienda_precios: objeto con nombre_tienda → precio para cada tienda donde haya un precio (opcional)
 
+Si hay columnas con nombres de tiendas (Inspector, Zorro, etc.) y precios, inclúyelos en tienda_precios.
 Si hay dos columnas de costo/precio, la menor es precio_min y la mayor es precio_max.
-Si solo hay una columna de precio, úsala como precio_min y precio_max.
 
-Responde SOLO con un JSON array, sin markdown, sin explicación. Ejemplo:
-[{"producto":"NESCAFE CLASICO 6/350 G","cantidad":14,"precio_min":978,"precio_max":1084}]`
+Responde SOLO con un JSON array, sin markdown. Ejemplo:
+[{"producto":"NESCAFE CLASICO 6/350 G","cantidad":14,"precio_min":978,"precio_max":1084,"tienda_precios":{"Inspector":990,"Zorro":1010}}]`
         },
       ],
     }],
@@ -158,10 +279,8 @@ Responde SOLO con un JSON array, sin markdown, sin explicación. Ejemplo:
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
 
-  // Extract JSON from response
-  let rows: { producto: string; cantidad: number; precio_min: number | null; precio_max: number | null }[]
+  let rows: { producto: string; cantidad: number; precio_min: number | null; precio_max: number | null; tienda_precios?: Record<string, number> }[]
   try {
-    // Try to find JSON array in the response
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (!jsonMatch) throw new Error('No JSON array found')
     rows = JSON.parse(jsonMatch[0])
@@ -172,7 +291,6 @@ Responde SOLO con un JSON array, sin markdown, sin explicación. Ejemplo:
     }, { status: 400 })
   }
 
-  // Normalize min/max
   rows = rows.map((r) => {
     if (r.precio_min != null && r.precio_max != null && r.precio_min > r.precio_max) {
       return { ...r, precio_min: r.precio_max, precio_max: r.precio_min }
