@@ -32,6 +32,7 @@ const emptyForm = () => ({
   numero_lote: generateLote(),
   fecha_caducidad: '',
   ubicacion_id: '',
+  ubicacion_nueva: '',
 })
 
 function getExpiryStatus(fecha: string | null): 'expired' | 'soon' | 'ok' | null {
@@ -203,6 +204,27 @@ export default function InventarioPage() {
     const precio_compra_unitario = parseFloat(form.precio_compra_unitario)
     const precio_compra_total = parseFloat((cantidad * precio_compra_unitario).toFixed(2))
 
+    // Create new ubicación if "Otro" selected
+    let ubicacionId: string | null = form.ubicacion_id || null
+    if (form.ubicacion_id === '__nuevo__' && form.ubicacion_nueva.trim()) {
+      const codigo = form.ubicacion_nueva.trim().toUpperCase().replace(/\s+/g, '-').substring(0, 20)
+      const { data: newUbi, error: ubiErr } = await supabase
+        .from('ubicaciones')
+        .insert({ codigo, nombre: form.ubicacion_nueva.trim() })
+        .select()
+        .single()
+      if (ubiErr || !newUbi) {
+        setError(`Error creando ubicación: ${ubiErr?.message ?? 'desconocido'}`)
+        setSaving(false)
+        return
+      }
+      ubicacionId = newUbi.id
+      setUbicaciones((prev) => [...prev, newUbi as Ubicacion].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+      setForm((f) => ({ ...f, ubicacion_id: newUbi.id, ubicacion_nueva: '' }))
+    } else if (form.ubicacion_id === '__nuevo__') {
+      ubicacionId = null
+    }
+
     const payload = {
       ean: form.ean || null,
       sku: form.sku || generateSKU(),
@@ -216,7 +238,7 @@ export default function InventarioPage() {
       cajas_por_tarima: form.cajas_por_tarima ? parseInt(form.cajas_por_tarima) : null,
       numero_lote: form.numero_lote || generateLote(),
       fecha_caducidad: form.fecha_caducidad || null,
-      ubicacion_id: form.ubicacion_id || null,
+      ubicacion_id: ubicacionId,
       fotos: formFotos,
     }
 
@@ -415,12 +437,24 @@ export default function InventarioPage() {
             />
           </FormField>
 
-          <FormField label="Ubicación">
-            <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value }))}>
+          <FormField label="Almacén / Ubicación">
+            <Select value={form.ubicacion_id} onChange={(e) => setForm((f) => ({ ...f, ubicacion_id: e.target.value, ubicacion_nueva: '' }))}>
               <option value="">— Ninguna —</option>
               {ubicaciones.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              <option value="__nuevo__">+ Otro (escribir nombre)</option>
             </Select>
           </FormField>
+          {form.ubicacion_id === '__nuevo__' && (
+            <FormField label="Nombre del nuevo almacén">
+              <Input
+                type="text"
+                value={form.ubicacion_nueva}
+                onChange={(e) => setForm((f) => ({ ...f, ubicacion_nueva: e.target.value }))}
+                placeholder="Ej: Bodega norte, Sucursal centro..."
+                autoFocus
+              />
+            </FormField>
+          )}
 
           {/* Fotos de evidencia */}
           <div className="border border-gray-200 rounded-xl p-3 bg-white">
