@@ -51,6 +51,8 @@ export default function ChatPage() {
   const sampleRateRef = useRef(16000)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const recordingStartRef = useRef<number>(0)
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSoundRef = useRef<number>(0)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -135,11 +137,16 @@ export default function ChatPage() {
     return new Blob([wavBuf], { type: 'audio/wav' })
   }
 
-  // ─── Voice recording (raw PCM via ScriptProcessorNode — no WebM) ───────
+  // ─── Voice recording with silence detection ────────────────────────────
+
+  const SILENCE_THRESHOLD = 0.015 // amplitude below this = silence
+  const SILENCE_TIMEOUT_MS = 2500  // stop after 2.5s of silence
 
   async function startRecording() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      })
       const audioCtx = new AudioContext()
       const source = audioCtx.createMediaStreamSource(stream)
       // eslint-disable-next-line deprecation/deprecation
@@ -147,13 +154,39 @@ export default function ChatPage() {
 
       pcmChunksRef.current = []
       sampleRateRef.current = audioCtx.sampleRate
+      lastSoundRef.current = Date.now()
 
       processor.onaudioprocess = (e) => {
         const data = e.inputBuffer.getChannelData(0)
         pcmChunksRef.current.push(new Float32Array(data))
+
+        // Check for voice activity (RMS energy)
+        let sum = 0
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i]
+        const rms = Math.sqrt(sum / data.length)
+
+        if (rms > SILENCE_THRESHOLD) {
+          lastSoundRef.current = Date.now()
+          // Clear any pending silence timer
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current)
+            silenceTimerRef.current = null
+          }
+        } else {
+          // Start silence timer if not already running and we've had at least 1s of recording
+          const elapsed = Date.now() - recordingStartRef.current
+          if (!silenceTimerRef.current && elapsed > 1000) {
+            silenceTimerRef.current = setTimeout(() => {
+              // Auto-stop if silence persists
+              if (Date.now() - lastSoundRef.current >= SILENCE_TIMEOUT_MS) {
+                stopAndTranscribe()
+              }
+              silenceTimerRef.current = null
+            }, SILENCE_TIMEOUT_MS)
+          }
+        }
       }
 
-      // Connect through silent gain to ensure onaudioprocess fires on all browsers
       const silentGain = audioCtx.createGain()
       silentGain.gain.value = 0
       source.connect(processor)
@@ -164,12 +197,22 @@ export default function ChatPage() {
       streamRef.current = stream
       recordingStartRef.current = Date.now()
       setRecording(true)
+      setHint('Hablando... se detiene automáticamente')
+      setTimeout(() => setHint(''), 2000)
     } catch {
       alert('No se pudo acceder al micrófono. Verifica los permisos.')
     }
   }
 
-  async function stopRecording() {
+  function toggleRecording() {
+    if (recording) {
+      stopAndTranscribe()
+    } else {
+      startRecording()
+    }
+  }
+
+  async function stopAndTranscribe() {
     const audioCtx = audioCtxRef.current
     const stream = streamRef.current
     if (!audioCtx || !stream) return
@@ -177,15 +220,21 @@ export default function ChatPage() {
     const duration = Date.now() - recordingStartRef.current
     setRecording(false)
 
+    // Clear silence timer
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
+    }
+
     // Stop capture
     stream.getTracks().forEach((t) => t.stop())
     await audioCtx.close()
     audioCtxRef.current = null
     streamRef.current = null
 
-    // Ignore accidental taps shorter than 600ms
-    if (duration < 600) {
-      setHint('Mantén presionado mientras hablas')
+    // Ignore very short recordings
+    if (duration < 500) {
+      setHint('Grabación muy corta. Toca e intenta de nuevo.')
       setTimeout(() => setHint(''), 2500)
       return
     }
@@ -199,7 +248,7 @@ export default function ChatPage() {
       return
     }
 
-    // Concatenate PCM chunks into a single Float32Array
+    // Concatenate PCM chunks
     const totalLen = pcmChunksRef.current.reduce((a, c) => a + c.length, 0)
     const pcm = new Float32Array(totalLen)
     let offset = 0
@@ -208,8 +257,10 @@ export default function ChatPage() {
       offset += chunk.length
     }
 
-    // Encode as WAV — raw PCM, universally compatible with Groq
-    const wavBlob = encodePcmToWav(pcm, sampleRateRef.current)
+    // Trim leading/trailing silence
+    const trimmed = trimSilence(pcm, SILENCE_THRESHOLD * 0.5)
+
+    const wavBlob = encodePcmToWav(trimmed, sampleRateRef.current)
     const file = new File([wavBlob], 'audio.wav', { type: 'audio/wav' })
 
     const form = new FormData()
@@ -237,12 +288,36 @@ export default function ChatPage() {
         await sendMessage(data.text.trim(), true)
       } else {
         setTranscribing(false)
-        alert('Audio recibido pero sin texto. Habla más cerca del micrófono.')
+        setHint('No se detectó voz. Habla más cerca del micrófono.')
+        setTimeout(() => setHint(''), 3000)
       }
     } catch {
       setTranscribing(false)
       alert('Error de red al transcribir el audio.')
     }
+  }
+
+  // Trim leading/trailing silence from PCM data
+  function trimSilence(pcm: Float32Array, threshold: number): Float32Array {
+    const windowSize = 1024
+    let start = 0
+    let end = pcm.length
+
+    // Find first non-silent window
+    for (let i = 0; i < pcm.length - windowSize; i += windowSize) {
+      let sum = 0
+      for (let j = 0; j < windowSize; j++) sum += Math.abs(pcm[i + j])
+      if (sum / windowSize > threshold) { start = Math.max(0, i - windowSize); break }
+    }
+
+    // Find last non-silent window
+    for (let i = pcm.length - windowSize; i > start; i -= windowSize) {
+      let sum = 0
+      for (let j = 0; j < windowSize; j++) sum += Math.abs(pcm[i + j])
+      if (sum / windowSize > threshold) { end = Math.min(pcm.length, i + windowSize * 2); break }
+    }
+
+    return pcm.slice(start, end)
   }
 
   const micBusy = recording || transcribing
@@ -322,9 +397,7 @@ export default function ChatPage() {
         <div className="flex items-end gap-2">
           {/* Mic button */}
           <button
-            onPointerDown={(e) => { e.preventDefault(); startRecording() }}
-            onPointerUp={stopRecording}
-            onPointerLeave={recording ? stopRecording : undefined}
+            onClick={(e) => { e.preventDefault(); toggleRecording() }}
             onContextMenu={(e) => e.preventDefault()}
             disabled={loading || transcribing}
             style={{ userSelect: 'none', touchAction: 'none' }}

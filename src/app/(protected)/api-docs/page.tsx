@@ -154,58 +154,6 @@ const endpoints: Endpoint[] = [
     ],
     exampleResponse: { data: { id: 'uuid', concepto: 'Flete aguacate', monto: 1200, categoria: 'flete' }, error: null },
   },
-  // ── Cotizaciones ──────────────────────────────────────────────────
-  {
-    method: 'GET',
-    path: '/api/v1/cotizaciones',
-    description: 'Lista las rondas de cotización',
-    params: [
-      { name: 'status', type: 'string', required: false, description: 'Filtrar por status: abierta|cerrada' },
-      { name: 'limit', type: 'number', required: false, description: 'Máx resultados (default 100, máx 500)' },
-      { name: 'offset', type: 'number', required: false, description: 'Paginación (default 0)' },
-    ],
-    exampleResponse: {
-      data: [{ id: 'uuid', nombre: 'COT-20260318-AB12', fecha: '2026-03-18', status: 'abierta', productos_count: 5 }],
-      error: null, meta: { total: 3, limit: 100, offset: 0 },
-    },
-  },
-  {
-    method: 'POST',
-    path: '/api/v1/cotizaciones',
-    description: 'Crea una ronda de cotización con productos',
-    body: [
-      { name: 'fecha', type: 'date', required: true, description: 'Fecha de la ronda YYYY-MM-DD' },
-      { name: 'productos', type: 'string[]', required: true, description: 'Array de nombres de productos a cotizar' },
-      { name: 'nombre', type: 'string', required: false, description: 'Nombre/folio de la ronda' },
-      { name: 'notas', type: 'string', required: false, description: 'Observaciones' },
-    ],
-    exampleResponse: { data: { id: 'uuid', nombre: 'COT-20260318-AB12', fecha: '2026-03-18', status: 'abierta', productos_count: 3 }, error: null },
-  },
-  {
-    method: 'GET',
-    path: '/api/v1/cotizaciones/:id',
-    description: 'Obtiene una ronda con productos, precios por tienda y lista de tiendas',
-    params: [],
-    exampleResponse: {
-      data: {
-        id: 'uuid', nombre: 'Semana 12', fecha: '2026-03-13', status: 'abierta',
-        productos: [
-          { id: 'uuid', nombre_producto: 'Leche 1L', precios: [{ tienda_id: 'uuid', tienda_nombre: 'Garis', precio: 18.00 }] },
-        ],
-        tiendas: [{ id: 'uuid', nombre: 'Garis' }],
-      },
-      error: null,
-    },
-  },
-  {
-    method: 'PUT',
-    path: '/api/v1/cotizaciones/:id',
-    description: 'Actualiza precios de una ronda (upsert por producto+tienda)',
-    body: [
-      { name: 'precios', type: 'array', required: true, description: 'Array de {producto_id, tienda_id, precio}' },
-    ],
-    exampleResponse: { data: { updated: 5 }, error: null },
-  },
 ]
 
 function CopyButton({ text }: { text: string }) {
@@ -357,28 +305,38 @@ Códigos: 200=OK, 201=Creado, 400=Validación, 401=Auth, 404=No encontrado, 500=
 ## Endpoints
 
 ### Inventario
-- GET  /api/v1/inventario — Lista inventario. Params: limit, offset
-- POST /api/v1/inventario — Crea producto. Body: nombre_producto*, cantidad*, precio_compra_unitario*, ean, sku, unidad_medida, numero_lote, fecha_caducidad, cantidad_por_caja, cajas_por_tarima, ubicacion_id
+- GET  /api/v1/inventario — Lista productos en inventario con existencias, precios, lotes. Params: limit, offset
+- POST /api/v1/inventario — Crea producto. Body: nombre_producto*, cantidad*, precio_compra_unitario*, ean, sku, unidad_medida(unidad|kg|lt|caja|tarima|pieza|litro|gramo), numero_lote, fecha_caducidad, cantidad_por_caja, cajas_por_tarima, ubicacion_id
 
 ### Compras
-- GET  /api/v1/compras — Lista compras. Params: desde, hasta, limit, offset
+- GET  /api/v1/compras — Lista compras con proveedor. Params: desde, hasta, limit, offset
 - POST /api/v1/compras — Registra compra. Body: fecha*, monto_total*, descripcion, forma_pago(efectivo|bonos_gasolina|mixto|otro), gastos, persona_id, ubicacion_id, notas
 
 ### Ventas
-- GET  /api/v1/ventas — Lista ventas. Params: desde, hasta, limit, offset
-- POST /api/v1/ventas — Registra venta. Body: fecha*, monto_total*, forma_pago, fecha_entrega, gastos_extras, persona_id, vendedor_id, ubicacion_id, notas
+- GET  /api/v1/ventas — Lista ventas con cliente. Params: desde, hasta, limit, offset
+- POST /api/v1/ventas — Registra venta. Body: fecha*, monto_total*, forma_pago, fecha_entrega, gastos_extras, persona_id, vendedor_id, ubicacion_id, notas. Si es crédito (pendiente/parcial) genera remisión automática.
 
 ### Gastos
-- GET  /api/v1/gastos — Lista gastos. Params: desde, hasta, limit, offset
+- GET  /api/v1/gastos — Lista gastos operativos. Params: desde, hasta, limit, offset
 - POST /api/v1/gastos — Registra gasto. Body: fecha*, concepto*, monto*, categoria(flete|combustible|personal|arrendamiento|otro), persona_id, notas
 
-### Cotizaciones (rondas de cotización en tiendas)
-- GET  /api/v1/cotizaciones — Lista rondas. Params: status(abierta|cerrada), limit, offset
-- POST /api/v1/cotizaciones — Crea ronda. Body: fecha*, productos*(string[]), nombre, notas
-- GET  /api/v1/cotizaciones/:id — Detalle: ronda + productos + precios por tienda + lista tiendas
-- PUT  /api/v1/cotizaciones/:id — Upsert precios. Body: precios*([{producto_id, tienda_id, precio}])
+## Módulos adicionales (sin API pública, se usan desde el dashboard)
 
-Tiendas disponibles: Garis, Anicetos, La pasadita, Promotora del norte, Inspector, Génova, Sahuayo, Scorpion (dinámicas, pueden agregarse).
+### Pedidos y Cotizaciones (/cotizaciones)
+Flujo completo de procurement: subir Excel de pedidos → consolidar → cotizar en tiendas → asignar mejor precio → registrar compras → separar por cliente → generar remisión.
+
+### Análisis de Tickets (/tickets)
+Subir foto de ticket → IA extrae productos, precios, totales → revisar → autorizar.
+
+### Remisiones (/facturacion)
+Documentos de entrega. Exportar PDF y XML.
+
+### CxC y CxP
+Cuentas por cobrar y cuentas por pagar con tracking de status.
+
+### Roles
+- admin: acceso completo
+- cotizador: solo cotizaciones y tickets
 
 ## Notas
 - Fechas en formato YYYY-MM-DD
@@ -407,7 +365,6 @@ export default function ApiDocsPage() {
     { label: 'Compras', prefix: '/api/v1/compras' },
     { label: 'Ventas', prefix: '/api/v1/ventas' },
     { label: 'Gastos', prefix: '/api/v1/gastos' },
-    { label: 'Cotizaciones', prefix: '/api/v1/cotizaciones' },
   ]
 
   return (
@@ -487,8 +444,6 @@ export default function ApiDocsPage() {
                 { path: '/api/v1/compras', get: true, post: true, put: false },
                 { path: '/api/v1/ventas', get: true, post: true, put: false },
                 { path: '/api/v1/gastos', get: true, post: true, put: false },
-                { path: '/api/v1/cotizaciones', get: true, post: true, put: false },
-                { path: '/api/v1/cotizaciones/:id', get: true, post: false, put: true },
               ].map((r) => (
                 <tr key={r.path} className="hover:bg-gray-50">
                   <td className="px-4 py-2 font-mono text-xs text-gray-700">{r.path}</td>
