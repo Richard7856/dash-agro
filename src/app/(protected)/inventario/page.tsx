@@ -679,32 +679,22 @@ export default function InventarioPage() {
 
       {/* Stats */}
       {totalCount > 0 && (
-        <div className="flex flex-col gap-2 mb-4">
-          {/* Totales generales (del filtro activo) */}
-          <div className="grid grid-cols-3 gap-2">
-            <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-              <p className="text-xs text-[var(--nm-text-subtle)]">Productos</p>
-              <p className="text-lg font-bold text-[var(--nm-text)]">{totalCount}</p>
-            </div>
-            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
-              <p className="text-xs text-blue-600">Total piezas</p>
-              <p className="text-lg font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
-            </div>
-            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
-              <p className="text-xs text-blue-600">Valor total</p>
-              <p className="text-base font-bold text-blue-700 truncate">{formatMxn(totalValor)}</p>
-            </div>
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
+            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Productos</p>
+            <p className="text-lg font-bold text-[var(--nm-text)]">{totalCount}</p>
           </div>
-          {/* Página actual + vencimientos */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-              <p className="text-xs text-[var(--nm-text-subtle)]">Valor esta página</p>
-              <p className="text-base font-bold text-gray-700 truncate">{formatMxn(totalValorPagina)}</p>
-            </div>
-            <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
-              <p className="text-xs text-[var(--nm-text-subtle)]">Vencen pronto</p>
-              <p className={`text-base font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
-            </div>
+          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
+            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Piezas</p>
+            <p className="text-lg font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
+            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Valor</p>
+            <p className="text-sm font-bold text-blue-700 truncate">{formatMxn(totalValor)}</p>
+          </div>
+          <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Por vencer</p>
+            <p className={`text-lg font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
           </div>
         </div>
       )}
