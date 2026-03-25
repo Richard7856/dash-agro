@@ -70,6 +70,7 @@ export default function InventarioPage() {
   const [filtroVencimiento, setFiltroVencimiento] = useState<'' | 'pronto' | 'caducado' | 'vigente' | 'sin_fecha'>('')
   const [filtroDesde, setFiltroDesde] = useState('')
   const [filtroHasta, setFiltroHasta] = useState('')
+  const [filtroUbicacion, setFiltroUbicacion] = useState('')
   const [showFiltros, setShowFiltros] = useState(false)
 
   // Paginación
@@ -90,7 +91,7 @@ export default function InventarioPage() {
   }, [busqueda])
 
   // Reset página al cambiar filtros
-  useEffect(() => { setPage(1) }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta])
+  useEffect(() => { setPage(1) }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta, filtroUbicacion])
 
   // Ubicaciones: solo una vez al montar
   useEffect(() => {
@@ -113,8 +114,9 @@ export default function InventarioPage() {
     if (filtroVencimiento === 'sin_fecha') q = (q as any).is('fecha_caducidad', null)
     if (filtroDesde) q = (q as any).gte('created_at', filtroDesde)
     if (filtroHasta) q = (q as any).lte('created_at', filtroHasta + 'T23:59:59')
+    if (filtroUbicacion) q = (q as any).eq('ubicacion_id', filtroUbicacion)
     return q
-  }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta])
+  }, [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta, filtroUbicacion])
 
   const loadData = useCallback(async () => {
     setRefreshing(true)
@@ -178,6 +180,7 @@ export default function InventarioPage() {
       numero_lote: r.numero_lote ?? '',
       fecha_caducidad: r.fecha_caducidad ?? '',
       ubicacion_id: r.ubicacion_id ?? '',
+      ubicacion_nueva: '',
     })
     setFormFotos(r.fotos ?? [])
     setError('')
@@ -300,10 +303,10 @@ export default function InventarioPage() {
   }).length
 
   // Filtros activos
-  const hayFiltros = !!(debouncedBusqueda || filtroVencimiento || filtroDesde || filtroHasta)
-  const filtrosActivos = [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta].filter(Boolean).length
+  const hayFiltros = !!(debouncedBusqueda || filtroVencimiento || filtroDesde || filtroHasta || filtroUbicacion)
+  const filtrosActivos = [debouncedBusqueda, filtroVencimiento, filtroDesde, filtroHasta, filtroUbicacion].filter(Boolean).length
   function limpiarFiltros() {
-    setBusqueda(''); setDebouncedBusqueda(''); setFiltroVencimiento(''); setFiltroDesde(''); setFiltroHasta('')
+    setBusqueda(''); setDebouncedBusqueda(''); setFiltroVencimiento(''); setFiltroDesde(''); setFiltroHasta(''); setFiltroUbicacion('')
   }
 
   const totalPages = Math.ceil(totalCount / pageSize)
@@ -533,7 +536,7 @@ export default function InventarioPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Inventario"
-        subtitle={`${hayFiltros ? `${totalCount} resultado${totalCount !== 1 ? 's' : ''}` : `${totalCount} registros en total`}`}
+        subtitle={`${hayFiltros ? `${totalCount} resultado${totalCount !== 1 ? 's' : ''}${filtroUbicacion ? ` en ${ubicaciones.find(u => u.id === filtroUbicacion)?.nombre ?? ''}` : ''}` : `${totalCount} registros en total`} · ${Math.round(totalCantidad)} piezas`}
         action={{ label: 'Nuevo registro', onClick: openNew }}
       />
 
@@ -578,6 +581,36 @@ export default function InventarioPage() {
         {/* Panel de filtros colapsable */}
         {showFiltros && (
           <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-col gap-4">
+            {/* Almacén / Ubicación */}
+            <div>
+              <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wider mb-2">Almacén</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setFiltroUbicacion('')}
+                  className={`px-3 py-1.5 text-xs rounded-full font-medium border transition-colors ${
+                    !filtroUbicacion
+                      ? 'bg-gray-700 text-white border-gray-700'
+                      : 'bg-gray-50 text-[var(--nm-text-muted)] border-gray-200 hover:border-gray-400'
+                  }`}
+                >
+                  Todos
+                </button>
+                {ubicaciones.map((u) => (
+                  <button
+                    key={u.id}
+                    onClick={() => setFiltroUbicacion(u.id)}
+                    className={`px-3 py-1.5 text-xs rounded-full font-medium border transition-colors ${
+                      filtroUbicacion === u.id
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-gray-50 text-[var(--nm-text-muted)] border-gray-200 hover:border-gray-400'
+                    }`}
+                  >
+                    {u.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Vencimiento */}
             <div>
               <p className="text-xs font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wider mb-2">Vencimiento</p>
