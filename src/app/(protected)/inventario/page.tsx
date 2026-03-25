@@ -12,6 +12,7 @@ import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import type { InventarioRegistro, Ubicacion, UnidadMedida } from '@/lib/types/database.types'
 import { FotoUploader } from '@/components/ui/FotoUploader'
+import { useToast } from '@/components/ui/Toast'
 
 const EanScanner = dynamic(() => import('@/components/inventario/EanScanner').then((m) => m.EanScanner), { ssr: false })
 
@@ -47,6 +48,7 @@ function getExpiryStatus(fecha: string | null): 'expired' | 'soon' | 'ok' | null
 }
 
 export default function InventarioPage() {
+  const { toast } = useToast()
   const [registros, setRegistros] = useState<InventarioRegistro[]>([])
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
   const [initialLoading, setInitialLoading] = useState(true)
@@ -258,6 +260,7 @@ export default function InventarioPage() {
     if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
 
     setSaving(false)
+    toast({ type: 'success', message: editId ? 'Registro actualizado correctamente' : 'Artículo agregado al inventario' })
     setView('list')
     if (!editId) setPage(1)
     forceRefresh()
@@ -679,22 +682,50 @@ export default function InventarioPage() {
 
       {/* Stats */}
       {totalCount > 0 && (
-        <div className="grid grid-cols-4 gap-2 mb-4">
-          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Productos</p>
-            <p className="text-lg font-bold text-[var(--nm-text)]">{totalCount}</p>
+        <div className="flex flex-col gap-2 mb-4">
+          {/* Totales generales */}
+          <p className="text-[10px] font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wider">
+            Totales{filtroUbicacion ? ` — ${ubicaciones.find(u => u.id === filtroUbicacion)?.nombre ?? ''}` : ''}
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            <div className="bg-white rounded-xl p-2.5 border border-gray-200 text-center">
+              <p className="text-[10px] text-[var(--nm-text-subtle)]">Productos</p>
+              <p className="text-base font-bold text-[var(--nm-text)]">{totalCount}</p>
+            </div>
+            <div className="bg-white rounded-xl p-2.5 border border-gray-200 text-center">
+              <p className="text-[10px] text-[var(--nm-text-subtle)]">Piezas</p>
+              <p className="text-base font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="bg-white rounded-xl p-2.5 border border-gray-200 text-center">
+              <p className="text-[10px] text-[var(--nm-text-subtle)]">Valor</p>
+              <p className="text-sm font-bold text-blue-700 truncate">{formatMxn(totalValor)}</p>
+            </div>
+            <div className={`rounded-xl p-2.5 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+              <p className="text-[10px] text-[var(--nm-text-subtle)]">Por vencer</p>
+              <p className={`text-base font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
+            </div>
           </div>
-          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Piezas</p>
-            <p className="text-lg font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Valor</p>
-            <p className="text-sm font-bold text-blue-700 truncate">{formatMxn(totalValor)}</p>
-          </div>
-          <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
-            <p className="text-[10px] text-[var(--nm-text-subtle)] uppercase tracking-wider">Por vencer</p>
-            <p className={`text-lg font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
+          {/* Página actual */}
+          <p className="text-[10px] font-semibold text-[var(--nm-text-subtle)] uppercase tracking-wider mt-1">
+            Página {page} de {totalPages}
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400">Productos</p>
+              <p className="text-base font-bold text-gray-600">{registros.length}</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400">Piezas</p>
+              <p className="text-base font-bold text-gray-600">{registros.reduce((s, r) => s + r.cantidad, 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400">Valor</p>
+              <p className="text-sm font-bold text-gray-600 truncate">{formatMxn(totalValorPagina)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-2.5 border border-gray-100 text-center">
+              <p className="text-[10px] text-gray-400">Por vencer</p>
+              <p className="text-base font-bold text-gray-600">{vencenProto}</p>
+            </div>
           </div>
         </div>
       )}
