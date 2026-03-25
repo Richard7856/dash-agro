@@ -78,6 +78,7 @@ export default function InventarioPage() {
   const [pageSize, setPageSize] = useState<PageSize>(20)
   const [totalCount, setTotalCount] = useState(0)
   const [totalCantidad, setTotalCantidad] = useState(0)
+  const [totalValor, setTotalValor] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
@@ -135,9 +136,11 @@ export default function InventarioPage() {
     setTotalCount(count ?? 0)
 
     const { data: cantData } = await applyFilters(
-      supabase.from('inventario_registros').select('cantidad')
+      supabase.from('inventario_registros').select('cantidad, precio_compra_total')
     )
-    setTotalCantidad((cantData ?? []).reduce((s, r) => s + ((r as { cantidad: number }).cantidad ?? 0), 0))
+    const rows = (cantData ?? []) as { cantidad: number; precio_compra_total: number }[]
+    setTotalCantidad(rows.reduce((s, r) => s + (r.cantidad ?? 0), 0))
+    setTotalValor(rows.reduce((s, r) => s + (r.precio_compra_total ?? 0), 0))
 
     setInitialLoading(false)
     setRefreshing(false)
@@ -676,22 +679,32 @@ export default function InventarioPage() {
 
       {/* Stats */}
       {totalCount > 0 && (
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-[var(--nm-text-subtle)]">Productos</p>
-            <p className="text-base font-bold text-[var(--nm-text)]">{totalCount}</p>
+        <div className="flex flex-col gap-2 mb-4">
+          {/* Totales generales (del filtro activo) */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
+              <p className="text-xs text-[var(--nm-text-subtle)]">Productos</p>
+              <p className="text-lg font-bold text-[var(--nm-text)]">{totalCount}</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
+              <p className="text-xs text-blue-600">Total piezas</p>
+              <p className="text-lg font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
+              <p className="text-xs text-blue-600">Valor total</p>
+              <p className="text-base font-bold text-blue-700 truncate">{formatMxn(totalValor)}</p>
+            </div>
           </div>
-          <div className="bg-blue-50 rounded-xl p-3 border border-blue-100 text-center">
-            <p className="text-xs text-blue-600">Total piezas</p>
-            <p className="text-base font-bold text-blue-700">{totalCantidad.toLocaleString('es-MX', { maximumFractionDigits: 2 })}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
-            <p className="text-xs text-[var(--nm-text-subtle)]">Valor página</p>
-            <p className="text-base font-bold text-blue-700 truncate">{formatMxn(totalValorPagina)}</p>
-          </div>
-          <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
-            <p className="text-xs text-[var(--nm-text-subtle)]">Vencen pronto</p>
-            <p className={`text-base font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
+          {/* Página actual + vencimientos */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-white rounded-xl p-3 border border-gray-200 text-center">
+              <p className="text-xs text-[var(--nm-text-subtle)]">Valor esta página</p>
+              <p className="text-base font-bold text-gray-700 truncate">{formatMxn(totalValorPagina)}</p>
+            </div>
+            <div className={`rounded-xl p-3 border text-center ${vencenProto > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+              <p className="text-xs text-[var(--nm-text-subtle)]">Vencen pronto</p>
+              <p className={`text-base font-bold ${vencenProto > 0 ? 'text-amber-700' : 'text-[var(--nm-text-subtle)]'}`}>{vencenProto}</p>
+            </div>
           </div>
         </div>
       )}
