@@ -157,6 +157,20 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'FINANZAS',
     items: [
       {
+        href: '/finanzas',
+        label: 'Panel Financiero',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="18" rx="2" />
+            <path d="M2 9h20" />
+            <path d="M10 3v6" />
+            <path d="M8 15h2v4H8z" />
+            <path d="M12 13h2v6h-2z" />
+            <path d="M16 11h2v8h-2z" />
+          </svg>
+        ),
+      },
+      {
         href: '/facturacion',
         label: 'Remisiones',
         icon: (
