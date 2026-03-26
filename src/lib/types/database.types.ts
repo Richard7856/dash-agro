@@ -266,7 +266,7 @@ export interface CompraItem extends CompraItemRow {
 
 // ─── User Profiles (roles) ───────────────────────────────────────────────────
 
-export type UserRol = 'admin' | 'cotizador'
+export type UserRol = 'admin' | 'subgerente' | 'gerente_operativo' | 'auxiliar' | 'contadora' | 'cotizador'
 
 interface UserProfileRow {
   id: string
@@ -495,6 +495,66 @@ export interface TicketAnalisis extends TicketAnalisisRow {
 }
 
 export type TicketItem = TicketItemRow
+
+// ─── Unidades y Checklist ─────────────────────────────────────────────────────
+
+interface UnidadRow {
+  id: string
+  nombre: string
+  placa: string | null
+  tipo: string
+  activo: boolean
+  created_at: string
+}
+
+export type Unidad = UnidadRow
+
+interface ChecklistRegistroRow {
+  id: string
+  unidad_id: string
+  fecha: string
+  llantas: boolean
+  aceite: boolean
+  luces: boolean
+  frenos: boolean
+  limpieza: boolean
+  documentos: boolean
+  combustible_nivel: string
+  kilometraje: number | null
+  notas: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface ChecklistRegistro extends ChecklistRegistroRow {
+  unidades?: { nombre: string; placa: string | null } | null
+  user_profiles?: { nombre: string | null; email: string } | null
+}
+
+// ─── Tareas ──────────────────────────────────────────────────────────────────
+
+export type TareaPrioridad = 'baja' | 'normal' | 'alta' | 'urgente'
+export type TareaStatus = 'pendiente' | 'en_progreso' | 'completada' | 'cancelada'
+
+interface TareaRow {
+  id: string
+  titulo: string
+  descripcion: string | null
+  asignado_a: string | null
+  creado_por: string | null
+  prioridad: TareaPrioridad
+  status: TareaStatus
+  fecha_limite: string | null
+  completada_at: string | null
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Tarea extends TareaRow {
+  asignado?: { nombre: string | null; email: string } | null
+  creador?: { nombre: string | null; email: string } | null
+}
 
 // ─── Database type para createClient<Database> ──────────────────────────────
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const VALID_ROLES = ['admin', 'cotizador']
+const VALID_ROLES = ['admin', 'subgerente', 'gerente_operativo', 'auxiliar', 'contadora', 'cotizador']
 
 export async function POST(req: NextRequest) {
   // Auth check: require bearer token from logged-in admin

@@ -118,6 +118,29 @@ export const NAV_GROUPS: NavGroup[] = [
         ),
       },
       {
+        href: '/checklist',
+        label: 'Checklist Unidades',
+        roles: ['admin', 'gerente_operativo'],
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M9 11l2 2 4-4" />
+            <line x1="9" y1="17" x2="15" y2="17" />
+          </svg>
+        ),
+      },
+      {
+        href: '/tareas',
+        label: 'Tareas',
+        roles: ['admin', 'subgerente', 'gerente_operativo'],
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+        ),
+      },
+      {
         href: '/bonos',
         label: 'Bonos gasolina',
         icon: (

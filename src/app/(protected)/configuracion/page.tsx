@@ -190,9 +190,13 @@ export default function ConfiguracionPage() {
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5 text-sm text-blue-800">
-            <p className="font-medium mb-1">Roles</p>
-            <p><strong>Admin</strong> — acceso completo a todos los módulos.</p>
-            <p><strong>Cotizador</strong> — solo puede ver cotizaciones y llenar precios/fotos en rondas abiertas.</p>
+            <p className="font-medium mb-1">Roles del sistema</p>
+            <p><strong>Admin</strong> — acceso completo.</p>
+            <p><strong>Subgerente</strong> — acceso completo (facturación, cobranza, tesorería, tareas).</p>
+            <p><strong>Gerente Operativo</strong> — operaciones, inventario, merma, checklist, tareas.</p>
+            <p><strong>Auxiliar</strong> — cotizaciones, tickets, inventario, compras, ventas.</p>
+            <p><strong>Contadora</strong> — finanzas, facturación, CxC, CxP, reportes, gastos.</p>
+            <p><strong>Cotizador</strong> — solo cotizaciones y tickets.</p>
           </div>
 
           {loadingUsers ? (
@@ -208,9 +212,19 @@ export default function ConfiguracionPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-gray-900 text-sm">{u.nombre ?? u.email}</p>
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          u.rol === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-cyan-100 text-cyan-700'
+                          u.rol === 'admin' ? 'bg-purple-100 text-purple-700'
+                          : u.rol === 'subgerente' ? 'bg-blue-100 text-blue-700'
+                          : u.rol === 'gerente_operativo' ? 'bg-green-100 text-green-700'
+                          : u.rol === 'contadora' ? 'bg-amber-100 text-amber-700'
+                          : u.rol === 'auxiliar' ? 'bg-teal-100 text-teal-700'
+                          : 'bg-cyan-100 text-cyan-700'
                         }`}>
-                          {u.rol === 'admin' ? 'Admin' : 'Cotizador'}
+                          {u.rol === 'admin' ? 'Admin'
+                          : u.rol === 'subgerente' ? 'Subgerente'
+                          : u.rol === 'gerente_operativo' ? 'Gte. Operativo'
+                          : u.rol === 'auxiliar' ? 'Auxiliar'
+                          : u.rol === 'contadora' ? 'Contadora'
+                          : 'Cotizador'}
                         </span>
                         {!u.activo && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Inactivo</span>
@@ -225,6 +239,10 @@ export default function ConfiguracionPage() {
                         className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
                       >
                         <option value="admin">Admin</option>
+                        <option value="subgerente">Subgerente</option>
+                        <option value="gerente_operativo">Gerente Operativo</option>
+                        <option value="auxiliar">Auxiliar</option>
+                        <option value="contadora">Contadora</option>
                         <option value="cotizador">Cotizador</option>
                       </select>
                       <button

@@ -12,8 +12,13 @@ import { ToastProvider } from '@/components/ui/Toast'
 import type { User } from '@supabase/supabase-js'
 import type { UserProfile } from '@/lib/types/database.types'
 
-/** Routes a cotizador is allowed to visit */
-const COTIZADOR_ALLOWED = ['/cotizaciones', '/tickets']
+/** Route restrictions per role — if a role is listed here, they can ONLY access these paths */
+const ROLE_ROUTES: Partial<Record<string, { allowed: string[]; home: string }>> = {
+  cotizador: { allowed: ['/cotizaciones', '/tickets'], home: '/cotizaciones' },
+  auxiliar: { allowed: ['/cotizaciones', '/tickets', '/inventario', '/compras', '/ventas'], home: '/dashboard' },
+  contadora: { allowed: ['/finanzas', '/facturacion', '/cxc', '/cxp', '/reportes', '/gastos', '/bonos'], home: '/finanzas' },
+  // admin, subgerente, gerente_operativo → no restrictions (see all)
+}
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -67,8 +72,9 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   // Role-based route protection
   useEffect(() => {
     if (checking || !profile) return
-    if (profile.rol === 'cotizador' && !COTIZADOR_ALLOWED.some((p) => pathname.startsWith(p))) {
-      router.replace('/cotizaciones')
+    const restriction = ROLE_ROUTES[profile.rol]
+    if (restriction && !restriction.allowed.some((p) => pathname.startsWith(p)) && pathname !== '/dashboard') {
+      router.replace(restriction.home)
     }
   }, [checking, profile, pathname, router])
 
