@@ -11,7 +11,11 @@ import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import type { Gasto, Persona } from '@/lib/types/database.types'
 
-const CATEGORIAS = ['flete', 'combustible', 'personal', 'arrendamiento', 'otro']
+const CATEGORIAS = [
+  'flete', 'combustible', 'personal', 'arrendamiento',
+  'comidas', 'dádivas', 'operativos', 'variados',
+  'mantenimiento', 'servicios', 'otro',
+]
 
 const emptyForm = () => ({
   fecha: todayISO(),

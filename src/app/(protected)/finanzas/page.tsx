@@ -79,6 +79,10 @@ export default function FinanzasPage() {
   // Trend (12 months)
   const [meses, setMeses] = useState<MesData[]>([])
 
+  // Gastos diarios (últimos 14 días)
+  const [gastosDiarios, setGastosDiarios] = useState<{ dia: string; label: string; total: number }[]>([])
+  const [totalMerma, setTotalMerma] = useState(0)
+
   // Top lists
   const [topClientes, setTopClientes] = useState<TopItem[]>([])
   const [topProveedores, setTopProveedores] = useState<TopItem[]>([])
@@ -227,6 +231,37 @@ export default function FinanzasPage() {
       prMap.set(name, (prMap.get(name) ?? 0) + (vi.total as number))
     }
     setTopProductos(Array.from(prMap.entries()).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total).slice(0, 5))
+
+    // Gastos diarios (últimos 14 días)
+    const hace14 = new Date()
+    hace14.setDate(hace14.getDate() - 13)
+    const desde14 = hace14.toISOString().split('T')[0]
+    const { data: gastosDia } = await supabase
+      .from('gastos')
+      .select('fecha, monto')
+      .gte('fecha', desde14)
+      .order('fecha')
+    const dMap = new Map<string, number>()
+    for (const g of gastosDia ?? []) {
+      const f = g.fecha as string
+      dMap.set(f, (dMap.get(f) ?? 0) + (g.monto as number))
+    }
+    const dias: { dia: string; label: string; total: number }[] = []
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const ds = d.toISOString().split('T')[0]
+      const dayLabel = d.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric' }).replace('.', '')
+      dias.push({ dia: ds, label: dayLabel, total: dMap.get(ds) ?? 0 })
+    }
+    setGastosDiarios(dias)
+
+    // Merma del mes
+    const { data: mermaData } = await supabase
+      .from('merma_registros')
+      .select('valor_perdido')
+      .gte('fecha', mInicio).lte('fecha', mFin)
+    setTotalMerma((mermaData ?? []).reduce((s, r) => s + (r.valor_perdido as number), 0))
   }, [])
 
   // ─── effects ──────────────────────────────────────────────────────────────
@@ -289,7 +324,7 @@ export default function FinanzasPage() {
       </div>
 
       {/* Balance general */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
           <p className="text-[10px] text-gray-400 uppercase">Inventario</p>
           <p className="text-sm font-bold text-gray-800">{formatMxn(valorInventario)}</p>
@@ -302,6 +337,10 @@ export default function FinanzasPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
           <p className="text-[10px] text-gray-400 uppercase">Por pagar</p>
           <p className="text-sm font-bold text-red-600">{formatMxn(cxp)}</p>
+        </div>
+        <div className={`rounded-xl border p-3 text-center ${totalMerma > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-200'}`}>
+          <p className="text-[10px] text-gray-400 uppercase">Merma (mes)</p>
+          <p className={`text-sm font-bold ${totalMerma > 0 ? 'text-red-600' : 'text-gray-400'}`}>{formatMxn(totalMerma)}</p>
         </div>
         <div className={`rounded-xl border p-3 text-center ${(valorInventario + cxc - cxp) >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-red-50 border-red-200'}`}>
           <p className="text-[10px] text-gray-400 uppercase">Balance neto</p>
@@ -351,6 +390,37 @@ export default function FinanzasPage() {
               </div>
             )
           })}
+        </div>
+      </div>
+
+      {/* Gastos diarios (últimos 14 días) */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Gastos diarios (últimos 14 días)</h3>
+        {(() => {
+          const maxDay = Math.max(...gastosDiarios.map(d => d.total), 1)
+          return (
+            <div className="flex gap-0.5 items-end h-28">
+              {gastosDiarios.map((d) => {
+                const h = d.total > 0 ? (d.total / maxDay) * 100 : 0
+                const isToday = d.dia === todayStr()
+                return (
+                  <div key={d.dia} className="flex-1 flex flex-col items-center gap-0.5">
+                    <span className="text-[8px] text-gray-400 font-medium">{d.total > 0 ? formatMxn(d.total).replace('MXN', '').replace('$', '$') : ''}</span>
+                    <div className="w-full flex items-end justify-center" style={{ height: '80px' }}>
+                      <div className={`w-full rounded-t transition-all ${isToday ? 'bg-red-500' : 'bg-red-300'}`}
+                        style={{ height: `${h}%`, minHeight: d.total > 0 ? 2 : 0 }}
+                        title={`${d.label}: ${formatMxn(d.total)}`} />
+                    </div>
+                    <span className={`text-[8px] ${isToday ? 'text-red-600 font-bold' : 'text-gray-400'}`}>{d.label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })()}
+        <div className="mt-2 text-xs text-gray-500 text-right">
+          Promedio diario: <strong>{formatMxn(gastosDiarios.reduce((s, d) => s + d.total, 0) / 14)}</strong>
+          {' · '}Semana: <strong>{formatMxn(gastosDiarios.slice(-7).reduce((s, d) => s + d.total, 0))}</strong>
         </div>
       </div>
 

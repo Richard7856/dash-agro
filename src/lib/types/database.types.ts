@@ -436,6 +436,28 @@ export interface SeparacionItem extends SeparacionItemRow {
   consolidado_items?: { nombre_producto: string } | null
 }
 
+// ─── Merma ───────────────────────────────────────────────────────────────────
+
+export type MermaMotivo = 'caducidad' | 'daño' | 'robo' | 'devolucion' | 'otro'
+
+interface MermaRegistroRow {
+  id: string
+  inventario_registro_id: string | null
+  nombre_producto: string
+  cantidad: number
+  unidad_medida: string
+  motivo: MermaMotivo
+  valor_perdido: number
+  notas: string | null
+  fecha: string
+  created_by: string | null
+  created_at: string
+}
+
+export interface MermaRegistro extends MermaRegistroRow {
+  inventario_registros?: { nombre_producto: string } | null
+}
+
 // ─── Ticket Análisis ─────────────────────────────────────────────────────────
 
 export type TicketStatus = 'pendiente' | 'revisado' | 'autorizado' | 'guardado'
