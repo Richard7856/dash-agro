@@ -24,6 +24,7 @@ const emptyForm = () => ({
   monto: '',
   categoria: 'otro',
   persona_id: '',
+  chofer: '',
   notas: '',
 })
 
@@ -73,6 +74,7 @@ export default function GastosPage() {
       monto: String(g.monto),
       categoria: g.categoria ?? 'otro',
       persona_id: g.persona_id ?? '',
+      chofer: (g as Gasto & { chofer?: string }).chofer ?? '',
       notas: g.notas ?? '',
     })
     setError('')
@@ -102,6 +104,7 @@ export default function GastosPage() {
       monto: parseFloat(form.monto),
       categoria: form.categoria || null,
       persona_id: form.persona_id || null,
+      chofer: form.categoria === 'combustible' ? (form.chofer.trim() || null) : null,
       notas: form.notas || null,
     }
 
@@ -133,6 +136,7 @@ export default function GastosPage() {
         g.concepto.toLowerCase().includes(q) ||
         (g.categoria ?? '').toLowerCase().includes(q) ||
         (g.notas ?? '').toLowerCase().includes(q) ||
+        ((g as Gasto & { chofer?: string }).chofer ?? '').toLowerCase().includes(q) ||
         (g.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
       )
     }
@@ -183,7 +187,7 @@ export default function GastosPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Categoría">
-              <Select value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}>
+              <Select value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value, chofer: '' }))}>
                 {CATEGORIAS.map((c) => (
                   <option key={c} value={c} className="capitalize">{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                 ))}
@@ -196,6 +200,17 @@ export default function GastosPage() {
               </Select>
             </FormField>
           </div>
+
+          {form.categoria === 'combustible' && (
+            <FormField label="Chofer">
+              <Input
+                type="text"
+                placeholder="Nombre del chofer"
+                value={form.chofer}
+                onChange={(e) => setForm((f) => ({ ...f, chofer: e.target.value }))}
+              />
+            </FormField>
+          )}
 
           <FormField label="Notas">
             <Textarea placeholder="Observaciones opcionales..." value={form.notas} onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))} />
@@ -316,6 +331,12 @@ export default function GastosPage() {
                       <span>{formatDate(g.fecha)}</span>
                       {(g.personas as { nombre: string } | null)?.nombre && (
                         <span>{(g.personas as { nombre: string }).nombre}</span>
+                      )}
+                      {(g as Gasto & { chofer?: string }).chofer && (
+                        <span className="flex items-center gap-1">
+                          <span>🚗</span>
+                          {(g as Gasto & { chofer?: string }).chofer}
+                        </span>
                       )}
                     </div>
                     {g.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{g.notas}</p>}
