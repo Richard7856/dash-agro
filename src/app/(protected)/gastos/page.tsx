@@ -15,8 +15,67 @@ import { logActivity } from '@/lib/activity-log'
 const CATEGORIAS = [
   'flete', 'combustible', 'personal', 'arrendamiento',
   'comidas', 'dádivas', 'operativos', 'variados',
-  'mantenimiento', 'servicios', 'otro',
+  'mantenimiento', 'servicios', 'consumos internos', 'otro',
 ]
+
+type Periodo = 'semana' | 'mes' | 'trimestre' | 'año' | 'personalizado'
+
+function toISO(d: Date) {
+  return d.toISOString().slice(0, 10)
+}
+
+function getRango(periodo: Periodo, customDesde: string, customHasta: string) {
+  const hoy = new Date()
+  if (periodo === 'semana') {
+    const day = hoy.getDay() === 0 ? 7 : hoy.getDay()
+    const lun = new Date(hoy); lun.setDate(hoy.getDate() - day + 1)
+    const dom = new Date(hoy); dom.setDate(hoy.getDate() - day + 7)
+    return { desde: toISO(lun), hasta: toISO(dom) }
+  }
+  if (periodo === 'mes') {
+    const first = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+    const last = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0)
+    return { desde: toISO(first), hasta: toISO(last) }
+  }
+  if (periodo === 'trimestre') {
+    const q = Math.floor(hoy.getMonth() / 3)
+    const first = new Date(hoy.getFullYear(), q * 3, 1)
+    const last = new Date(hoy.getFullYear(), q * 3 + 3, 0)
+    return { desde: toISO(first), hasta: toISO(last) }
+  }
+  if (periodo === 'año') {
+    return { desde: `${hoy.getFullYear()}-01-01`, hasta: `${hoy.getFullYear()}-12-31` }
+  }
+  return { desde: customDesde, hasta: customHasta }
+}
+
+function getPeriodoAnterior(desde: string, hasta: string) {
+  const d1 = new Date(desde + 'T00:00:00')
+  const d2 = new Date(hasta + 'T00:00:00')
+  const dur = d2.getTime() - d1.getTime() + 86400000
+  const newHasta = new Date(d1.getTime() - 86400000)
+  const newDesde = new Date(d1.getTime() - dur)
+  return { desde: toISO(newDesde), hasta: toISO(newHasta) }
+}
+
+function calcTotalesPorCategoria(gastos: Gasto[], desde: string, hasta: string) {
+  const map: Record<string, number> = {}
+  gastos.forEach(g => {
+    if (g.fecha >= desde && g.fecha <= hasta) {
+      const cat = g.categoria ?? 'otro'
+      map[cat] = (map[cat] ?? 0) + g.monto
+    }
+  })
+  return map
+}
+
+const PERIODO_LABELS: Record<Periodo, string> = {
+  semana: 'Esta semana',
+  mes: 'Este mes',
+  trimestre: 'Este trimestre',
+  año: 'Este año',
+  personalizado: 'Personalizado',
+}
 
 const emptyForm = () => ({
   fecha: todayISO(),
@@ -33,6 +92,12 @@ export default function GastosPage() {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState<'list' | 'form'>('list')
+  const [tab, setTab] = useState<'lista' | 'resumen'>('lista')
+  // Resumen states
+  const [periodo, setPeriodo] = useState<Periodo>('mes')
+  const [customDesde, setCustomDesde] = useState('')
+  const [customHasta, setCustomHasta] = useState('')
+  const [comparar, setComparar] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm())
   const [saving, setSaving] = useState(false)
@@ -74,7 +139,7 @@ export default function GastosPage() {
       monto: String(g.monto),
       categoria: g.categoria ?? 'otro',
       persona_id: g.persona_id ?? '',
-      chofer: (g as Gasto & { chofer?: string }).chofer ?? '',
+      chofer: g.chofer ?? '',
       notas: g.notas ?? '',
     })
     setError('')
@@ -136,7 +201,7 @@ export default function GastosPage() {
         g.concepto.toLowerCase().includes(q) ||
         (g.categoria ?? '').toLowerCase().includes(q) ||
         (g.notas ?? '').toLowerCase().includes(q) ||
-        ((g as Gasto & { chofer?: string }).chofer ?? '').toLowerCase().includes(q) ||
+        (g.chofer ?? '').toLowerCase().includes(q) ||
         (g.personas as { nombre: string } | null)?.nombre?.toLowerCase().includes(q)
       )
     }
@@ -150,6 +215,24 @@ export default function GastosPage() {
   function limpiarFiltros() {
     setBusqueda(''); setFiltroCategoria(''); setFiltroDesde(''); setFiltroHasta('')
   }
+
+  // Resumen calculado
+  const rangoActual = getRango(periodo, customDesde, customHasta)
+  const totalesActual = useMemo(
+    () => calcTotalesPorCategoria(gastos, rangoActual.desde, rangoActual.hasta),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gastos, rangoActual.desde, rangoActual.hasta]
+  )
+  const rangoAnterior = getPeriodoAnterior(rangoActual.desde, rangoActual.hasta)
+  const totalesAnterior = useMemo(
+    () => comparar ? calcTotalesPorCategoria(gastos, rangoAnterior.desde, rangoAnterior.hasta) : {},
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gastos, rangoAnterior.desde, rangoAnterior.hasta, comparar]
+  )
+  const totalActual = Object.values(totalesActual).reduce((s, v) => s + v, 0)
+  const totalAnterior = Object.values(totalesAnterior).reduce((s, v) => s + v, 0)
+  const catOrdenadas = CATEGORIAS.filter(c => (totalesActual[c] ?? 0) > 0 || (totalesAnterior[c] ?? 0) > 0)
+  const maxVal = Math.max(...catOrdenadas.map(c => Math.max(totalesActual[c] ?? 0, totalesAnterior[c] ?? 0)), 1)
 
   if (loading) return <Spinner color="red" fullPage />
 
@@ -229,10 +312,176 @@ export default function GastosPage() {
     <div className="max-w-2xl mx-auto px-4 py-5">
       <PageHeader
         title="Gastos"
-        subtitle={hayFiltros ? `${gastosFiltrados.length} de ${gastos.length}` : `${gastos.length} registros`}
+        subtitle={tab === 'lista' ? (hayFiltros ? `${gastosFiltrados.length} de ${gastos.length}` : `${gastos.length} registros`) : undefined}
         action={{ label: 'Nuevo gasto', onClick: openNew }}
       />
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{error}</p>}
+
+      {/* Tabs Lista / Resumen */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-4">
+        {(['lista', 'resumen'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-1.5 text-sm font-medium rounded-lg transition-colors capitalize ${
+              tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t === 'lista' ? 'Lista' : '📊 Resumen'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── VISTA RESUMEN ───────────────────────────────────────── */}
+      {tab === 'resumen' && (
+        <div>
+          {/* Selector de período */}
+          <div className="flex gap-1.5 flex-wrap mb-3">
+            {(Object.keys(PERIODO_LABELS) as Periodo[]).map(p => (
+              <button
+                key={p}
+                onClick={() => setPeriodo(p)}
+                className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${
+                  periodo === p
+                    ? 'bg-red-500 text-white border-red-500'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-red-300'
+                }`}
+              >
+                {PERIODO_LABELS[p]}
+              </button>
+            ))}
+          </div>
+
+          {/* Fechas personalizadas */}
+          {periodo === 'personalizado' && (
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Desde</label>
+                <input type="date" value={customDesde} onChange={e => setCustomDesde(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Hasta</label>
+                <input type="date" value={customHasta} onChange={e => setCustomHasta(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white" />
+              </div>
+            </div>
+          )}
+
+          {/* Rango activo + toggle comparar */}
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs text-gray-400">
+              {rangoActual.desde} → {rangoActual.hasta}
+            </p>
+            <button
+              onClick={() => setComparar(v => !v)}
+              className={`px-3 py-1 text-xs rounded-full font-medium border transition-colors ${
+                comparar ? 'bg-blue-500 text-white border-blue-500' : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300'
+              }`}
+            >
+              {comparar ? '✓ Comparando' : 'Comparar período anterior'}
+            </button>
+          </div>
+
+          {/* Período anterior info */}
+          {comparar && (
+            <p className="text-xs text-gray-400 mb-3 -mt-2">
+              Anterior: {rangoAnterior.desde} → {rangoAnterior.hasta}
+            </p>
+          )}
+
+          {/* Totales generales */}
+          <div className={`grid gap-3 mb-4 ${comparar ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <div className="bg-red-50 border border-red-100 rounded-xl p-3">
+              <p className="text-xs text-red-500 font-medium mb-0.5">
+                {comparar ? 'Período actual' : 'Total período'}
+              </p>
+              <p className="text-xl font-bold text-red-700">{formatMxn(totalActual)}</p>
+              <p className="text-xs text-red-400 mt-0.5">{catOrdenadas.filter(c => totalesActual[c]).length} categorías</p>
+            </div>
+            {comparar && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <p className="text-xs text-gray-500 font-medium mb-0.5">Período anterior</p>
+                <p className="text-xl font-bold text-gray-700">{formatMxn(totalAnterior)}</p>
+                {totalAnterior > 0 && (
+                  <p className={`text-xs font-medium mt-0.5 ${totalActual > totalAnterior ? 'text-red-500' : 'text-green-600'}`}>
+                    {totalActual > totalAnterior ? '▲' : '▼'}{' '}
+                    {Math.abs(((totalActual - totalAnterior) / totalAnterior) * 100).toFixed(1)}% vs anterior
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Barras por categoría */}
+          {catOrdenadas.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Sin gastos en este período</p>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] overflow-hidden">
+              {catOrdenadas
+                .sort((a, b) => (totalesActual[b] ?? 0) - (totalesActual[a] ?? 0))
+                .map((cat, i) => {
+                  const va = totalesActual[cat] ?? 0
+                  const vb = totalesAnterior[cat] ?? 0
+                  const pctA = (va / maxVal) * 100
+                  const pctB = (vb / maxVal) * 100
+                  const diff = vb > 0 ? ((va - vb) / vb) * 100 : null
+                  return (
+                    <div key={cat} className={`p-3 ${i < catOrdenadas.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-medium text-gray-700 capitalize">{cat}</span>
+                        <div className="text-right">
+                          <span className="text-sm font-bold text-gray-900">{formatMxn(va)}</span>
+                          {comparar && vb > 0 && (
+                            <span className={`ml-2 text-xs font-medium ${va > vb ? 'text-red-500' : 'text-green-600'}`}>
+                              {va > vb ? '▲' : '▼'}{Math.abs(diff!).toFixed(0)}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {/* Barra actual */}
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-1">
+                        <div
+                          className="h-full bg-red-400 rounded-full transition-all duration-500"
+                          style={{ width: `${pctA}%` }}
+                        />
+                      </div>
+                      {/* Barra anterior */}
+                      {comparar && (
+                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-blue-300 rounded-full transition-all duration-500"
+                            style={{ width: `${pctB}%` }}
+                          />
+                        </div>
+                      )}
+                      {comparar && vb > 0 && (
+                        <p className="text-xs text-gray-400 mt-1">Anterior: {formatMxn(vb)}</p>
+                      )}
+                    </div>
+                  )
+                })}
+            </div>
+          )}
+
+          {/* Leyenda */}
+          {comparar && catOrdenadas.length > 0 && (
+            <div className="flex gap-4 mt-3 text-xs text-gray-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-2 bg-red-400 rounded-full inline-block" />
+                Período actual
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-1.5 bg-blue-300 rounded-full inline-block" />
+                Período anterior
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── VISTA LISTA ─────────────────────────────────────────── */}
+      {tab === 'lista' && (<>
 
       {/* Búsqueda + Filtros */}
       <div className="mb-4 flex flex-col gap-2">
@@ -332,10 +581,10 @@ export default function GastosPage() {
                       {(g.personas as { nombre: string } | null)?.nombre && (
                         <span>{(g.personas as { nombre: string }).nombre}</span>
                       )}
-                      {(g as Gasto & { chofer?: string }).chofer && (
+                      {g.chofer && (
                         <span className="flex items-center gap-1">
                           <span>🚗</span>
-                          {(g as Gasto & { chofer?: string }).chofer}
+                          {g.chofer}
                         </span>
                       )}
                     </div>
@@ -361,6 +610,7 @@ export default function GastosPage() {
       >
         +
       </button>
+      </>)}
     </div>
   )
 }

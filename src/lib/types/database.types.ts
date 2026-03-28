@@ -133,6 +133,7 @@ interface GastoRow {
   monto: number
   categoria: string | null
   persona_id: string | null
+  chofer: string | null
   notas: string | null
   created_at: string
   updated_at: string
