@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/format'
 import { Btn } from '@/components/ui/Btn'
 import { FormField, Input, Select } from '@/components/ui/FormField'
 import type { UserProfile } from '@/lib/types/database.types'
+import { REGIMENES_FISCALES } from '@/lib/facturama'
 
 interface ApiKey {
   id: string
@@ -36,7 +37,24 @@ export default function ConfiguracionPage() {
   const [userError, setUserError] = useState('')
 
   /* Active tab */
-  const [tab, setTab] = useState<'usuarios' | 'api'>('usuarios')
+  const [tab, setTab] = useState<'usuarios' | 'api' | 'cfdi'>('usuarios')
+
+  /* CFDI config state */
+  const [cfdiConfig, setCfdiConfig] = useState({
+    ambiente: 'sandbox',
+    usuario: '',
+    password_enc: '',
+    rfc_emisor: '',
+    nombre_emisor: '',
+    regimen_fiscal: '612',
+    cp_emisor: '',
+    serie_default: 'A',
+  })
+  const [loadingCfdi, setLoadingCfdi] = useState(false)
+  const [savingCfdi, setSavingCfdi] = useState(false)
+  const [testingCfdi, setTestingCfdi] = useState(false)
+  const [cfdiTestResult, setCfdiTestResult] = useState<{ ok: boolean; message?: string; ambiente?: string } | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const loadKeys = useCallback(async () => {
     const { data } = await supabase
@@ -56,7 +74,29 @@ export default function ConfiguracionPage() {
     setLoadingUsers(false)
   }, [])
 
-  useEffect(() => { loadKeys(); loadUsers() }, [loadKeys, loadUsers])
+  const loadCfdiConfig = useCallback(async () => {
+    setLoadingCfdi(true)
+    const { data } = await supabase
+      .from('cfdi_config')
+      .select('*')
+      .limit(1)
+      .single()
+    if (data) {
+      setCfdiConfig({
+        ambiente: data.ambiente ?? 'sandbox',
+        usuario: data.usuario ?? '',
+        password_enc: data.password_enc ?? '',
+        rfc_emisor: data.rfc_emisor ?? '',
+        nombre_emisor: data.nombre_emisor ?? '',
+        regimen_fiscal: data.regimen_fiscal ?? '612',
+        cp_emisor: data.cp_emisor ?? '',
+        serie_default: data.serie_default ?? 'A',
+      })
+    }
+    setLoadingCfdi(false)
+  }, [])
+
+  useEffect(() => { loadKeys(); loadUsers(); loadCfdiConfig() }, [loadKeys, loadUsers, loadCfdiConfig])
 
   /* ─── API Key handlers ─── */
 
@@ -158,6 +198,42 @@ export default function ConfiguracionPage() {
     setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, rol: newRol as UserProfile['rol'] } : x))
   }
 
+  /* ─── CFDI handlers ─── */
+
+  async function saveCfdiConfig() {
+    setSavingCfdi(true)
+    // Check if a row already exists
+    const { data: existing } = await supabase
+      .from('cfdi_config')
+      .select('id')
+      .limit(1)
+      .single()
+
+    if (existing?.id) {
+      await supabase
+        .from('cfdi_config')
+        .update({ ...cfdiConfig, updated_at: new Date().toISOString() })
+        .eq('id', existing.id)
+    } else {
+      await supabase.from('cfdi_config').insert(cfdiConfig)
+    }
+    setSavingCfdi(false)
+    alert('Configuración guardada correctamente.')
+  }
+
+  async function testCfdiConexion() {
+    setTestingCfdi(true)
+    setCfdiTestResult(null)
+    const res = await fetch('/api/facturama/status')
+    if (res.ok) {
+      const data = await res.json()
+      setCfdiTestResult(data)
+    } else {
+      setCfdiTestResult({ ok: false, message: 'Error al conectar' })
+    }
+    setTestingCfdi(false)
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-5">
       <div className="mb-5">
@@ -178,6 +254,12 @@ export default function ConfiguracionPage() {
           className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${tab === 'api' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
         >
           Claves API
+        </button>
+        <button
+          onClick={() => setTab('cfdi')}
+          className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${tab === 'cfdi' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          CFDI
         </button>
       </div>
 
@@ -417,6 +499,161 @@ export default function ConfiguracionPage() {
                     </div>
                   </form>
                 )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ═══ CFDI TAB ═══ */}
+      {tab === 'cfdi' && (
+        <>
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-700">Integración con Facturama (PAC)</p>
+          </div>
+
+          {loadingCfdi ? (
+            <div className="flex justify-center py-10">
+              <div className="w-7 h-7 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {/* Credenciales */}
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-800 mb-3 text-sm">Credenciales Facturama</h3>
+                <div className="flex flex-col gap-3">
+                  <FormField label="Ambiente">
+                    <Select
+                      value={cfdiConfig.ambiente}
+                      onChange={(e) => setCfdiConfig((f) => ({ ...f, ambiente: e.target.value }))}
+                    >
+                      <option value="sandbox">Sandbox (pruebas)</option>
+                      <option value="produccion">Producción</option>
+                    </Select>
+                  </FormField>
+                  <FormField label="Usuario Facturama">
+                    <Input
+                      type="text"
+                      value={cfdiConfig.usuario}
+                      onChange={(e) => setCfdiConfig((f) => ({ ...f, usuario: e.target.value }))}
+                      placeholder="Usuario de tu cuenta Facturama"
+                      autoComplete="off"
+                    />
+                  </FormField>
+                  <FormField label="Contraseña Facturama">
+                    <div className="relative">
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        value={cfdiConfig.password_enc}
+                        onChange={(e) => setCfdiConfig((f) => ({ ...f, password_enc: e.target.value }))}
+                        placeholder="Contraseña de tu cuenta Facturama"
+                        autoComplete="new-password"
+                        className="pr-16"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 hover:text-gray-700 font-medium"
+                      >
+                        {showPassword ? 'Ocultar' : 'Mostrar'}
+                      </button>
+                    </div>
+                  </FormField>
+                </div>
+              </div>
+
+              {/* Datos fiscales del emisor */}
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <h3 className="font-semibold text-gray-800 mb-3 text-sm">Datos fiscales del emisor</h3>
+                <div className="flex flex-col gap-3">
+                  <FormField label="RFC Emisor">
+                    <Input
+                      type="text"
+                      value={cfdiConfig.rfc_emisor}
+                      onChange={(e) => setCfdiConfig((f) => ({ ...f, rfc_emisor: e.target.value.toUpperCase() }))}
+                      placeholder="RFC de tu empresa"
+                      maxLength={13}
+                    />
+                  </FormField>
+                  <FormField label="Nombre / Razón Social">
+                    <Input
+                      type="text"
+                      value={cfdiConfig.nombre_emisor}
+                      onChange={(e) => setCfdiConfig((f) => ({ ...f, nombre_emisor: e.target.value }))}
+                      placeholder="Nombre fiscal de tu empresa"
+                    />
+                  </FormField>
+                  <FormField label="Régimen Fiscal">
+                    <Select
+                      value={cfdiConfig.regimen_fiscal}
+                      onChange={(e) => setCfdiConfig((f) => ({ ...f, regimen_fiscal: e.target.value }))}
+                    >
+                      {REGIMENES_FISCALES.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField label="CP Fiscal">
+                      <Input
+                        type="text"
+                        value={cfdiConfig.cp_emisor}
+                        onChange={(e) => setCfdiConfig((f) => ({ ...f, cp_emisor: e.target.value }))}
+                        placeholder="Código postal"
+                        maxLength={5}
+                      />
+                    </FormField>
+                    <FormField label="Serie default">
+                      <Input
+                        type="text"
+                        value={cfdiConfig.serie_default}
+                        onChange={(e) => setCfdiConfig((f) => ({ ...f, serie_default: e.target.value.toUpperCase() }))}
+                        placeholder="Ej. A"
+                        maxLength={5}
+                      />
+                    </FormField>
+                  </div>
+                </div>
+              </div>
+
+              {/* Test result */}
+              {cfdiTestResult && (
+                <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
+                  cfdiTestResult.ok
+                    ? cfdiTestResult.ambiente === 'sandbox'
+                      ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                      : 'bg-green-50 border border-green-200 text-green-800'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                  {cfdiTestResult.ok
+                    ? `Conexión exitosa — ambiente: ${cfdiTestResult.ambiente ?? 'desconocido'}`
+                    : `Sin conexión: ${cfdiTestResult.message ?? 'verifica las credenciales'}`}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3">
+                <Btn
+                  variant="secondary"
+                  onClick={testCfdiConexion}
+                  loading={testingCfdi}
+                  className="flex-1"
+                >
+                  Probar conexión
+                </Btn>
+                <Btn
+                  onClick={saveCfdiConfig}
+                  loading={savingCfdi}
+                  className="flex-1"
+                >
+                  Guardar configuración
+                </Btn>
+              </div>
+
+              {/* Nota */}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
+                <p className="font-medium mb-1">Nota de seguridad</p>
+                <p>Las credenciales se almacenan en la base de datos. Para producción, asegúrate de usar las credenciales reales de Facturama.</p>
               </div>
             </div>
           )}
