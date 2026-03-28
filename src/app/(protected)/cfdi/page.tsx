@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { formatMxn, formatDate } from '@/lib/format'
 import { Btn } from '@/components/ui/Btn'
 import { Spinner } from '@/components/ui/Spinner'
@@ -48,10 +48,21 @@ const emptyConcepto = (): ConceptoForm => ({
   codigo_sat: '01010101',
 })
 
+// Helper row para mostrar campo: valor
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <span className="text-gray-400 w-40 flex-shrink-0">{label}</span>
+      <span className="text-gray-800 font-medium flex-1">{value ?? '—'}</span>
+    </div>
+  )
+}
+
 const STATUS_COLORS: Record<string, string> = {
-  emitida: 'bg-green-50 text-green-700',
-  cancelada: 'bg-red-50 text-red-700',
+  emitida:               'bg-green-50 text-green-700',
+  cancelada:             'bg-red-50 text-red-700',
   pendiente_cancelacion: 'bg-amber-50 text-amber-700',
+  simulado:              'bg-purple-50 text-purple-700',
 }
 
 const TIPO_LABELS: Record<string, string> = {
@@ -60,14 +71,19 @@ const TIPO_LABELS: Record<string, string> = {
   P: 'Pago',
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type MockResponse = Record<string, any>
+
 export default function CfdiPage() {
-  const [view, setView] = useState<'list' | 'form'>('list')
+  const [view, setView] = useState<'list' | 'form' | 'result'>('list')
   const [cfdis, setCfdis] = useState<FacturaCfdi[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [simulating, setSimulating] = useState(false)
   const [search, setSearch] = useState('')
   const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; ambiente?: string; message?: string } | null>(null)
   const [error, setError] = useState('')
+  const [mockResponse, setMockResponse] = useState<MockResponse | null>(null)
 
   // Form state
   const [receptorRfc, setReceptorRfc] = useState('')
@@ -99,6 +115,54 @@ export default function CfdiPage() {
     loadCfdis()
     checkStatus()
   }, [loadCfdis, checkStatus])
+
+  const buildBody = () => ({
+    tipo: 'I',
+    receptor_rfc: receptorRfc.toUpperCase(),
+    receptor_nombre: receptorNombre,
+    uso_cfdi: receptorUsoCfdi,
+    receptor_regimen: receptorRegimen,
+    receptor_cp: receptorCp,
+    forma_pago: formaPago,
+    metodo_pago: metodoPago,
+    conceptos: conceptos.map(c => ({
+      descripcion: c.descripcion,
+      cantidad: parseFloat(c.cantidad) || 1,
+      precio_unitario: parseFloat(c.precio_unitario) || 0,
+      con_iva: c.con_iva,
+      codigo_sat: c.codigo_sat || '01010101',
+    })),
+    notas,
+  })
+
+  const handleSimular = async () => {
+    if (!receptorRfc.trim() || !receptorNombre.trim()) {
+      setError('RFC y nombre del receptor son requeridos para simular')
+      return
+    }
+    if (conceptos.some(c => !c.descripcion.trim())) {
+      setError('Todos los conceptos deben tener descripción')
+      return
+    }
+    setSimulating(true)
+    setError('')
+    try {
+      const res = await fetch('/api/facturama/cfdi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...buildBody(), demo: true }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error en simulación')
+      setMockResponse(data.mockResponse)
+      setView('result')
+      loadCfdis()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error en simulación')
+    } finally {
+      setSimulating(false)
+    }
+  }
 
   const resetForm = () => {
     setReceptorRfc('')
@@ -142,24 +206,7 @@ export default function CfdiPage() {
       const res = await fetch('/api/facturama/cfdi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo: 'I',
-          receptor_rfc: receptorRfc.toUpperCase(),
-          receptor_nombre: receptorNombre,
-          uso_cfdi: receptorUsoCfdi,
-          receptor_regimen: receptorRegimen,
-          receptor_cp: receptorCp,
-          forma_pago: formaPago,
-          metodo_pago: metodoPago,
-          conceptos: conceptos.map(c => ({
-            descripcion: c.descripcion,
-            cantidad: parseFloat(c.cantidad) || 1,
-            precio_unitario: parseFloat(c.precio_unitario) || 0,
-            con_iva: c.con_iva,
-            codigo_sat: c.codigo_sat || '01010101',
-          })),
-          notas,
-        }),
+        body: JSON.stringify(buildBody()),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al emitir')
@@ -387,9 +434,164 @@ export default function CfdiPage() {
           </FormField>
         </div>
 
-        <Btn onClick={handleEmitir} loading={saving} className="w-full" disabled={saving}>
-          Emitir CFDI
-        </Btn>
+        <div className="flex gap-3">
+          <Btn
+            onClick={handleSimular}
+            loading={simulating}
+            disabled={saving || simulating}
+            className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+          >
+            🧪 Simular envío
+          </Btn>
+          <Btn
+            onClick={handleEmitir}
+            loading={saving}
+            disabled={saving || simulating}
+            className="flex-1"
+          >
+            Emitir CFDI real
+          </Btn>
+        </div>
+        <p className="text-center text-xs text-gray-400 mt-2">
+          Simular genera una respuesta de ejemplo sin timbrar ante el SAT
+        </p>
+      </div>
+    )
+  }
+
+  // RESULT VIEW — respuesta simulada de Facturama
+  if (view === 'result' && mockResponse) {
+    const r = mockResponse
+    const stamp = r.Complement?.TaxStamp || {}
+    return (
+      <div className="max-w-2xl mx-auto p-4 pb-24">
+        <FormHeader
+          title="Respuesta simulada de Facturama"
+          onBack={() => { resetForm(); setView('list') }}
+        />
+
+        {/* Banner simulado */}
+        <div className="mb-4 px-4 py-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-800 text-sm font-medium flex items-center gap-2">
+          <span className="text-base">🧪</span>
+          <div>
+            <p className="font-semibold">Simulación completada — datos de ejemplo</p>
+            <p className="text-xs font-normal text-purple-600 mt-0.5">
+              Este sería el JSON que devuelve Facturama al timbrar exitosamente un CFDI real.
+            </p>
+          </div>
+        </div>
+
+        {/* Datos principales */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-400 inline-block" />
+            CFDI Timbrado
+          </h3>
+          <div className="space-y-2 text-sm">
+            <Row label="Folio Fiscal (UUID SAT)" value={<span className="font-mono text-xs text-blue-700 break-all">{r.FolioFiscal}</span>} />
+            <Row label="Serie / Folio" value={`${r.Serie} — ${r.Folio}`} />
+            <Row label="Fecha de timbrado" value={new Date(r.Date).toLocaleString('es-MX')} />
+            <Row label="Tipo" value={r.CfdiType === 'I' ? 'Ingreso' : r.CfdiType} />
+            <Row label="Método de pago" value={r.PaymentMethod} />
+            <Row label="Forma de pago" value={r.PaymentForm} />
+            <Row label="Moneda" value={r.Currency} />
+          </div>
+        </div>
+
+        {/* Emisor */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">Emisor</h3>
+          <div className="space-y-2 text-sm">
+            <Row label="RFC" value={r.Issuer?.Rfc} />
+            <Row label="Nombre" value={r.Issuer?.Name} />
+            <Row label="Régimen fiscal" value={r.Issuer?.FiscalRegime} />
+          </div>
+        </div>
+
+        {/* Receptor */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">Receptor</h3>
+          <div className="space-y-2 text-sm">
+            <Row label="RFC" value={r.Receiver?.Rfc} />
+            <Row label="Nombre" value={r.Receiver?.Name} />
+            <Row label="Uso CFDI" value={r.Receiver?.CfdiUse} />
+            <Row label="Régimen fiscal" value={r.Receiver?.FiscalRegime} />
+            <Row label="CP fiscal" value={r.Receiver?.TaxZipCode} />
+          </div>
+        </div>
+
+        {/* Conceptos */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">Conceptos</h3>
+          <div className="space-y-2">
+            {(r.Items || []).map((item: { descripcion: string; cantidad: number; precio_unitario: number; con_iva?: boolean }, i: number) => (
+              <div key={i} className="flex justify-between text-sm py-1 border-b border-gray-100 last:border-0">
+                <div>
+                  <p className="font-medium text-gray-800">{item.descripcion}</p>
+                  <p className="text-xs text-gray-400">{item.cantidad} × {formatMxn(item.precio_unitario)}</p>
+                </div>
+                <p className="font-medium text-gray-800">
+                  {formatMxn(item.cantidad * item.precio_unitario)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-200 space-y-1 text-sm">
+            <div className="flex justify-between text-gray-600">
+              <span>Subtotal</span><span>{formatMxn(r.Subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>IVA 16%</span><span>{formatMxn(r.Iva)}</span>
+            </div>
+            <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t border-gray-200 mt-1">
+              <span>Total</span><span>{formatMxn(r.Total)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Timbre fiscal */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)] p-4 mb-4">
+          <h3 className="font-semibold text-gray-700 mb-3">Timbre Fiscal Digital (SAT)</h3>
+          <div className="space-y-2 text-sm">
+            <Row label="Versión" value={stamp.Version} />
+            <Row label="UUID" value={<span className="font-mono text-xs text-blue-700 break-all">{stamp.Uuid}</span>} />
+            <Row label="Fecha timbrado" value={stamp.Date ? new Date(stamp.Date).toLocaleString('es-MX') : '—'} />
+            <Row label="No. certificado SAT" value={stamp.SatCertNumber} />
+            <Row label="RFC prov. certificación" value={stamp.RfcProvCertif} />
+          </div>
+          <div className="mt-3">
+            <p className="text-xs text-gray-500 mb-1">Sello CFDI (ejemplo)</p>
+            <p className="text-xs font-mono bg-gray-50 rounded-lg p-2 break-all text-gray-600 leading-relaxed">
+              {stamp.CfdiSign?.slice(0, 60)}...
+            </p>
+          </div>
+          <div className="mt-3">
+            <p className="text-xs text-gray-500 mb-1">Cadena original</p>
+            <p className="text-xs font-mono bg-gray-50 rounded-lg p-2 break-all text-gray-600">
+              {r.OriginalString}
+            </p>
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-xs text-amber-700">
+          <p className="font-semibold mb-1">Con las credenciales reales:</p>
+          <ul className="space-y-0.5 list-disc list-inside">
+            <li>Se generaría el PDF sellado con código QR del SAT</li>
+            <li>Se generaría el XML firmado descargable</li>
+            <li>El folio fiscal tendría validez ante el SAT</li>
+            <li>Se podría enviar por email al receptor desde aquí</li>
+          </ul>
+        </div>
+
+        <div className="flex gap-3">
+          <Btn variant="ghost" onClick={() => { resetForm(); setView('form') }} className="flex-1">
+            Nueva simulación
+          </Btn>
+          <Btn onClick={() => { resetForm(); setView('list') }} className="flex-1">
+            Ver en lista
+          </Btn>
+        </div>
       </div>
     )
   }
