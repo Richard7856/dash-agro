@@ -15,6 +15,7 @@ import { FotoUploader } from '@/components/ui/FotoUploader'
 import { generateNumeroFactura } from '@/lib/format'
 import { useToast } from '@/components/ui/Toast'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { logActivity } from '@/lib/activity-log'
 
 // Item local (en el formulario, antes de guardar)
 interface VentaItemLocal {
@@ -308,6 +309,7 @@ export default function VentasPage() {
 
     const { error: delErr } = await supabase.from('ventas').delete().eq('id', id)
     if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
+    logActivity({ accion: 'eliminar', modulo: 'ventas', detalle: `Venta eliminada`, registro_id: id })
     setVentas((vs) => vs.filter((v) => v.id !== id))
   }
 
@@ -422,6 +424,8 @@ export default function VentasPage() {
         toast({ message: `Remisión ${folioRemision} generada`, type: 'success' })
       }
     }
+
+    logActivity({ accion: editId ? 'editar' : 'crear', modulo: 'ventas', detalle: `Venta $${montoFinal}` })
 
     setSaving(false)
     setView('list')

@@ -13,6 +13,7 @@ import { FORMAS_PAGO } from '@/lib/constants'
 import type { Compra, Persona, Proveedor, Ubicacion, FormaPago, StatusPago, InventarioRegistro, UnidadMedida } from '@/lib/types/database.types'
 import { FotoUploader } from '@/components/ui/FotoUploader'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { logActivity } from '@/lib/activity-log'
 
 // Item local (en el formulario, antes de guardar)
 interface CompraItemLocal {
@@ -239,6 +240,7 @@ export default function ComprasPage() {
 
     const { error: delErr } = await supabase.from('compras').delete().eq('id', id)
     if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
+    logActivity({ accion: 'eliminar', modulo: 'compras', detalle: `Compra eliminada`, registro_id: id })
     setCompras((cs) => cs.filter((c) => c.id !== id))
   }
 
@@ -319,6 +321,8 @@ export default function ComprasPage() {
           .eq('id', item.inventario_registro_id)
       }
     }
+
+    logActivity({ accion: editId ? 'editar' : 'crear', modulo: 'compras', detalle: `${form.descripcion || 'Compra'} — $${montoFinal}` })
 
     setSaving(false)
     setView('list')

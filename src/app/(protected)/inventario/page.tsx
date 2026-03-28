@@ -13,6 +13,7 @@ import { FormHeader } from '@/components/ui/FormHeader'
 import type { InventarioRegistro, Ubicacion, UnidadMedida } from '@/lib/types/database.types'
 import { FotoUploader } from '@/components/ui/FotoUploader'
 import { useToast } from '@/components/ui/Toast'
+import { logActivity } from '@/lib/activity-log'
 
 const EanScanner = dynamic(() => import('@/components/inventario/EanScanner').then((m) => m.EanScanner), { ssr: false })
 
@@ -194,8 +195,10 @@ export default function InventarioPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar este registro?')) return
+    const toDelete = registros.find(r => r.id === id)
     const { error: delErr } = await supabase.from('inventario_registros').delete().eq('id', id)
     if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
+    logActivity({ accion: 'eliminar', modulo: 'inventario', detalle: toDelete?.nombre_producto ?? id, registro_id: id })
     // Si era el único de la página y hay más páginas, retroceder
     if (registros.length === 1 && page > 1) {
       setPage((p) => p - 1)
@@ -260,6 +263,7 @@ export default function InventarioPage() {
     if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
 
     setSaving(false)
+    logActivity({ accion: editId ? 'editar' : 'crear', modulo: 'inventario', detalle: `${form.nombre_producto} — ${form.cantidad} ${form.unidad_medida}` })
     toast({ type: 'success', message: editId ? 'Registro actualizado correctamente' : 'Artículo agregado al inventario' })
     setView('list')
     if (!editId) setPage(1)

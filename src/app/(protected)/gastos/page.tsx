@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Spinner } from '@/components/ui/Spinner'
 import { FormHeader } from '@/components/ui/FormHeader'
 import type { Gasto, Persona } from '@/lib/types/database.types'
+import { logActivity } from '@/lib/activity-log'
 
 const CATEGORIAS = [
   'flete', 'combustible', 'personal', 'arrendamiento',
@@ -82,6 +83,7 @@ export default function GastosPage() {
     if (!confirm('¿Eliminar este gasto?')) return
     const { error: delErr } = await supabase.from('gastos').delete().eq('id', id)
     if (delErr) { setError(`Error al eliminar: ${delErr.message}`); return }
+    logActivity({ accion: 'eliminar', modulo: 'gastos', detalle: `Gasto eliminado`, registro_id: id })
     setGastos((gs) => gs.filter((g) => g.id !== id))
   }
 
@@ -111,6 +113,8 @@ export default function GastosPage() {
     }
 
     if (err) { setError(`Error: ${err.message}`); setSaving(false); return }
+
+    logActivity({ accion: editId ? 'editar' : 'crear', modulo: 'gastos', detalle: `${form.concepto} — $${form.monto}` })
 
     setSaving(false)
     setView('list')

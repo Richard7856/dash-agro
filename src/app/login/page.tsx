@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Input, FormField } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
+import { logActivity } from '@/lib/activity-log'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -26,6 +27,7 @@ export default function LoginPage() {
       return
     }
 
+    logActivity({ accion: 'login', modulo: 'auth', detalle: `Login: ${email}` })
     router.replace('/dashboard')
   }
 
