@@ -13,6 +13,7 @@ import { FORMAS_PAGO } from '@/lib/constants'
 import type { Compra, Persona, Proveedor, Ubicacion, FormaPago, StatusPago, InventarioRegistro, UnidadMedida } from '@/lib/types/database.types'
 import { FotoUploader } from '@/components/ui/FotoUploader'
 import { SearchSelect } from '@/components/ui/SearchSelect'
+import { useToast } from '@/components/ui/Toast'
 import { logActivity } from '@/lib/activity-log'
 
 // Item local (en el formulario, antes de guardar)
@@ -46,6 +47,7 @@ const emptyForm = () => ({
 })
 
 export default function ComprasPage() {
+  const { toast } = useToast()
   const [compras, setCompras] = useState<Compra[]>([])
   const [personas, setPersonas] = useState<Persona[]>([])
   const [proveedores, setProveedores] = useState<Proveedor[]>([])
@@ -197,6 +199,27 @@ export default function ComprasPage() {
     setProductosResultados([])
     setError('')
     setView('form')
+  }
+
+  // Crea un nuevo producto en inventario con el nombre buscado y lo agrega directo a la compra
+  async function crearProducto(nombre: string) {
+    const { data, error } = await supabase
+      .from('inventario_registros')
+      .insert({
+        nombre_producto: nombre.trim(),
+        unidad_medida: 'unidad',
+        cantidad: 0,
+        precio_compra_unitario: 0,
+        precio_venta_publico: 0,
+        precio_distribuidor: 0,
+        precio_minimo: 0,
+        stock_minimo: 0,
+      })
+      .select()
+      .single()
+    if (error || !data) { toast({ type: 'error', message: `Error al crear producto: ${error?.message}` }); return }
+    agregarProducto(data as InventarioRegistro)
+    toast({ message: `Producto "${nombre.trim()}" creado`, type: 'success' })
   }
 
   function agregarProducto(p: InventarioRegistro) {
@@ -387,6 +410,18 @@ export default function ComprasPage() {
             </div>
 
             {buscandoProducto && <p className="text-xs text-[var(--nm-text-subtle)] px-1 mb-2">Buscando…</p>}
+            {busquedaProducto.trim() && !buscandoProducto && productosResultados.length === 0 && (
+              <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between gap-3">
+                <p className="text-xs text-amber-700">No existe en inventario</p>
+                <button
+                  type="button"
+                  onClick={() => crearProducto(busquedaProducto)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 whitespace-nowrap"
+                >
+                  + Crear "{busquedaProducto}"
+                </button>
+              </div>
+            )}
             {productosResultados.length > 0 && (
               <div className="border border-gray-200 rounded-lg overflow-hidden mb-2">
                 {productosResultados.map((p) => (

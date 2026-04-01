@@ -800,7 +800,15 @@ export default function VentasPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Estado de pago">
-              <Select value={form.status_pago} onChange={(e) => setForm((f) => ({ ...f, status_pago: e.target.value as StatusPago }))}>
+              <Select value={form.status_pago} onChange={(e) => {
+                const s = e.target.value as StatusPago
+                setForm((f) => ({
+                  ...f,
+                  status_pago: s,
+                  // Pagado = fecha vencimiento igual a la fecha de la venta (ya está saldado)
+                  fecha_vencimiento: s === 'pagado' ? f.fecha : f.fecha_vencimiento,
+                }))
+              }}>
                 <option value="pagado">Pagado</option>
                 <option value="parcial">Parcial</option>
                 <option value="pendiente">Pendiente</option>
