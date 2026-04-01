@@ -15,10 +15,13 @@ export function formatDate(dateStr: string): string {
 
 export function formatFormaPago(fp: FormaPago): string {
   const labels: Record<FormaPago, string> = {
-    efectivo:       'Efectivo',
-    bonos_gasolina: 'Bonos gasolina',
-    mixto:          'Mixto',
-    otro:           'Otro',
+    efectivo:        'Efectivo',
+    transferencia:   'Transferencia',
+    tarjeta_credito: 'Tarjeta crédito',
+    tarjeta_debito:  'Tarjeta débito',
+    bonos_gasolina:  'Bonos gasolina',
+    mixto:           'Mixto',
+    otro:            'Otro',
   }
   return labels[fp] ?? fp
 }
