@@ -94,6 +94,7 @@ export default function DashboardPage() {
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([])
   const [alertasStock, setAlertasStock] = useState<AlertaStock[]>([])
   const [alertasCaducidad, setAlertasCaducidad] = useState<AlertaStock[]>([])
+  const [alertasLotes, setAlertasLotes] = useState<{ id: string; numero_lote: string; fecha_caducidad: string; cantidad_actual: number; producto: string; unidad: string }[]>([])
   const [loading, setLoading] = useState(true)
 
   const [quickType, setQuickType] = useState<QuickType>(null)
@@ -129,6 +130,7 @@ export default function DashboardPage() {
       { data: comprasSemana },
       { data: stockBajoData },
       { data: caducidadData },
+      { data: lotesData },
     ] = await Promise.all([
       supabase
         .from('compras')
@@ -176,6 +178,15 @@ export default function DashboardPage() {
         .gte('fecha_caducidad', today)
         .order('fecha_caducidad', { ascending: true })
         .limit(5),
+      supabase
+        .from('inventario_lotes')
+        .select('id, numero_lote, fecha_caducidad, cantidad_actual, inventario_registros(nombre_producto, unidad_medida)')
+        .eq('status', 'activo')
+        .not('fecha_caducidad', 'is', null)
+        .lte('fecha_caducidad', soon)
+        .gte('fecha_caducidad', today)
+        .order('fecha_caducidad', { ascending: true })
+        .limit(10),
     ])
 
     const totalC = (comprasData ?? []).reduce((s, r) => s + (r.monto_total ?? 0), 0)
@@ -192,6 +203,15 @@ export default function DashboardPage() {
     // Alertas: filtrar client-side para columna vs columna
     setAlertasStock(((stockBajoData ?? []) as AlertaStock[]).filter((r) => r.cantidad <= r.stock_minimo).slice(0, 5))
     setAlertasCaducidad((caducidadData ?? []) as AlertaStock[])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setAlertasLotes((lotesData ?? []).map((l: any) => ({
+      id: l.id,
+      numero_lote: l.numero_lote,
+      fecha_caducidad: l.fecha_caducidad,
+      cantidad_actual: l.cantidad_actual,
+      producto: l.inventario_registros?.nombre_producto ?? 'Producto',
+      unidad: l.inventario_registros?.unidad_medida ?? '',
+    })))
 
     // Build weekly chart data (last 6 unique weeks)
     const ventasMap = groupByWeek((ventasSemana ?? []) as { fecha: string; monto_total: number }[])
@@ -378,7 +398,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Alertas */}
-      {(alertasStock.length > 0 || alertasCaducidad.length > 0) && (
+      {(alertasStock.length > 0 || alertasCaducidad.length > 0 || alertasLotes.length > 0) && (
         <div className="flex flex-col gap-2 mb-4">
           {alertasStock.length > 0 && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3">
@@ -405,6 +425,24 @@ export default function DashboardPage() {
                   <div key={r.id} className="flex items-center justify-between text-sm">
                     <span className="text-amber-800 truncate mr-2">{r.nombre_producto}</span>
                     <span className="text-amber-600 font-medium shrink-0">{formatDate(r.fecha_caducidad!)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {alertasLotes.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">
+                🏷 Lotes por caducar ({alertasLotes.length})
+              </p>
+              <div className="flex flex-col gap-1">
+                {alertasLotes.map((l) => (
+                  <div key={l.id} className="flex items-center justify-between text-sm">
+                    <div className="min-w-0">
+                      <span className="text-red-800 truncate block">{l.producto}</span>
+                      <span className="text-xs text-red-500">Lote: {l.numero_lote} · {l.cantidad_actual} {l.unidad}</span>
+                    </div>
+                    <span className="text-red-600 font-medium shrink-0 ml-2">{formatDate(l.fecha_caducidad)}</span>
                   </div>
                 ))}
               </div>

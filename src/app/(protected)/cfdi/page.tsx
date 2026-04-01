@@ -84,6 +84,10 @@ export default function CfdiPage() {
   const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; ambiente?: string; message?: string } | null>(null)
   const [error, setError] = useState('')
   const [mockResponse, setMockResponse] = useState<MockResponse | null>(null)
+  const [emailModal, setEmailModal] = useState<{ cfdi: FacturaCfdi } | null>(null)
+  const [emailTo, setEmailTo] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [emailError, setEmailError] = useState('')
 
   // Form state
   const [receptorRfc, setReceptorRfc] = useState('')
@@ -232,6 +236,27 @@ export default function CfdiPage() {
 
   const handleDescargar = (cfdi: FacturaCfdi, tipo: 'pdf' | 'xml') => {
     window.open(`/api/facturama/cfdi/${cfdi.id}?action=${tipo}`, '_blank')
+  }
+
+  const handleSendEmail = async () => {
+    if (!emailModal || !emailTo.trim()) return
+    setSendingEmail(true)
+    setEmailError('')
+    try {
+      const res = await fetch(`/api/facturama/cfdi/${emailModal.cfdi.id}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailTo.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al enviar')
+      setEmailModal(null)
+      setEmailTo('')
+    } catch (e: unknown) {
+      setEmailError(e instanceof Error ? e.message : 'Error al enviar email')
+    } finally {
+      setSendingEmail(false)
+    }
   }
 
   const filtered = cfdis.filter(c =>
@@ -580,7 +605,7 @@ export default function CfdiPage() {
             <li>Se generaría el PDF sellado con código QR del SAT</li>
             <li>Se generaría el XML firmado descargable</li>
             <li>El folio fiscal tendría validez ante el SAT</li>
-            <li>Se podría enviar por email al receptor desde aquí</li>
+            <li>Se puede enviar por email al receptor desde la lista de CFDIs</li>
           </ul>
         </div>
 
@@ -691,6 +716,15 @@ export default function CfdiPage() {
                     </Btn>
                   </>
                 )}
+                {cfdi.facturama_id && cfdi.status === 'emitida' && (
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setEmailModal({ cfdi }); setEmailTo(''); setEmailError('') }}
+                  >
+                    Enviar email
+                  </Btn>
+                )}
                 {cfdi.status === 'emitida' && (
                   <Btn
                     size="sm"
@@ -704,6 +738,45 @@ export default function CfdiPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal enviar por email */}
+      {emailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4"
+          onClick={() => setEmailModal(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-sm p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Enviar CFDI por email</h2>
+              <button onClick={() => setEmailModal(null)} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              Receptor: <span className="font-medium">{emailModal.cfdi.receptor_nombre}</span>
+            </p>
+            {emailError && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{emailError}</p>
+            )}
+            <FormField label="Email destino" required>
+              <Input
+                type="email"
+                value={emailTo}
+                onChange={e => setEmailTo(e.target.value)}
+                placeholder="correo@ejemplo.com"
+                autoFocus
+              />
+            </FormField>
+            <div className="flex gap-2 mt-4">
+              <Btn variant="secondary" onClick={() => setEmailModal(null)} className="flex-1">Cancelar</Btn>
+              <Btn onClick={handleSendEmail} loading={sendingEmail} disabled={!emailTo.trim()} className="flex-1">
+                Enviar
+              </Btn>
+            </div>
+          </div>
         </div>
       )}
     </div>

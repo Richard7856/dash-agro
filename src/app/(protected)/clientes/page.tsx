@@ -42,10 +42,13 @@ export default function ClientesPage() {
   const [search, setSearch] = useState('')
   const [filtroActivo, setFiltroActivo] = useState<'' | 'activo' | 'inactivo'>('')
 
-  const [detailTab, setDetailTab] = useState<'historial' | 'sugerencias'>('historial')
+  const [detailTab, setDetailTab] = useState<'historial' | 'sugerencias' | 'expediente'>('historial')
   const [ventas, setVentas] = useState<VentaHistorial[]>([])
   const [inventario, setInventario] = useState<InventarioItem[]>([])
   const [loadingDetail, setLoadingDetail] = useState(false)
+  // Expediente data
+  const [saldoPendiente, setSaldoPendiente] = useState(0)
+  const [pedidosActivos, setPedidosActivos] = useState<{ id: string; numero: string; fecha: string; status: string; total: number }[]>([])
 
   const loadData = useCallback(async () => {
     const { data } = await supabase.from('clientes').select('*').order('nombre')
@@ -81,7 +84,7 @@ export default function ClientesPage() {
 
   async function openDetail(c: Cliente) {
     setSelectedId(c.id); setDetailTab('historial'); setView('detail'); setLoadingDetail(true)
-    const [{ data: vs }, { data: inv }] = await Promise.all([
+    const [{ data: vs }, { data: inv }, { data: pendientes }, { data: pedidos }] = await Promise.all([
       supabase.from('ventas')
         .select('fecha, numero_venta, monto_total, notas')
         .eq('cliente_id', c.id)
@@ -90,9 +93,23 @@ export default function ClientesPage() {
         .select('id, nombre_producto, cantidad, unidad_medida, precio_compra_unitario')
         .gt('cantidad', 0)
         .order('cantidad', { ascending: false }),
+      // Saldo pendiente para la barra de crédito
+      supabase.from('ventas')
+        .select('monto_total, monto_pagado')
+        .eq('cliente_id', c.id)
+        .in('status_pago', ['pendiente', 'parcial']),
+      // Pedidos activos (borrador o confirmado)
+      supabase.from('ordenes_venta')
+        .select('id, numero, fecha, status, total')
+        .eq('cliente_id', c.id)
+        .in('status', ['borrador', 'confirmado'])
+        .order('fecha', { ascending: false }),
     ])
     setVentas((vs ?? []) as VentaHistorial[])
     setInventario((inv ?? []) as InventarioItem[])
+    const saldo = (pendientes ?? []).reduce((s, v) => s + (v.monto_total - v.monto_pagado), 0)
+    setSaldoPendiente(saldo)
+    setPedidosActivos(pedidos ?? [])
     setLoadingDetail(false)
   }
 
@@ -253,13 +270,13 @@ export default function ClientesPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-4">
-          {(['historial', 'sugerencias'] as const).map((tab) => (
+        <div className="flex border-b border-gray-200 mb-4 overflow-x-auto">
+          {(['historial', 'sugerencias', 'expediente'] as const).map((tab) => (
             <button key={tab} onClick={() => setDetailTab(tab)}
-              className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+              className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
                 detailTab === tab ? 'border-blue-600 text-blue-700' : 'border-transparent text-[var(--nm-text-muted)] hover:text-gray-700'
               }`}>
-              {tab === 'historial' ? 'Historial de ventas' : 'Sugerencias'}
+              {tab === 'historial' ? 'Historial' : tab === 'sugerencias' ? 'Sugerencias' : 'Expediente'}
             </button>
           ))}
         </div>
@@ -287,7 +304,7 @@ export default function ClientesPage() {
               ))}
             </div>
           )
-        ) : (
+        ) : detailTab === 'sugerencias' ? (
           <div>
             <p className="text-xs text-[var(--nm-text-subtle)] mb-3">Productos con existencia en almacén — ordenados por mayor stock disponible.</p>
             {inventario.length === 0 ? (
@@ -310,7 +327,83 @@ export default function ClientesPage() {
               </div>
             )}
           </div>
-        )}
+        ) : (() => {
+          // ── Expediente tab ───────────────────────────────────────────────
+          const cliente = clientes.find(c => c.id === selectedId)
+          const limite = cliente?.limite_credito ?? 0
+          const usoPct = limite > 0 ? Math.min((saldoPendiente / limite) * 100, 100) : 0
+          const barColor = usoPct >= 90 ? 'bg-red-500' : usoPct >= 70 ? 'bg-amber-400' : 'bg-green-500'
+          return (
+            <div className="space-y-4">
+              {/* Barra de crédito */}
+              {limite > 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold text-gray-700">Crédito utilizado</p>
+                    <p className="text-xs text-gray-500">{formatMxn(saldoPendiente)} / {formatMxn(limite)}</p>
+                  </div>
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${usoPct}%` }} />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{usoPct.toFixed(0)}% del límite de crédito utilizado</p>
+                </div>
+              )}
+              {limite === 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-500 text-center">
+                  Sin límite de crédito configurado
+                </div>
+              )}
+
+              {/* Pedidos activos */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pedidos activos</p>
+                {pedidosActivos.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">Sin pedidos en curso</p>
+                ) : (
+                  <div className="space-y-2">
+                    {pedidosActivos.map(p => (
+                      <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{p.numero}</p>
+                          <p className="text-xs text-gray-400">{formatDate(p.fecha)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.status === 'confirmado' ? 'bg-blue-50 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {p.status}
+                          </span>
+                          <span className="text-sm font-semibold text-gray-800">{formatMxn(p.total)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Últimas 5 ventas como resumen */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Últimas ventas</p>
+                {ventas.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">Sin ventas registradas</p>
+                ) : (
+                  <div className="space-y-2">
+                    {ventas.slice(0, 5).map((v, i) => (
+                      <div key={i} className="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between gap-2">
+                        <div>
+                          {v.numero_venta && <p className="text-xs text-gray-400">#{v.numero_venta}</p>}
+                          <p className="text-xs text-gray-400">{formatDate(v.fecha)}</p>
+                        </div>
+                        <span className="text-sm font-semibold text-gray-800">{formatMxn(v.monto_total)}</span>
+                      </div>
+                    ))}
+                    {ventas.length > 5 && (
+                      <p className="text-xs text-gray-400 text-center">+{ventas.length - 5} ventas más — ver en Historial</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
       </div>
     )
   }

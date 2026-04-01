@@ -38,6 +38,8 @@ const emptyForm = () => ({
   monto_bonos: '',
   monto_otro: '',
   gastos: '',
+  costo_flete: '',
+  costo_otros: '',
   notas: '',
   status_pago: 'pagado' as StatusPago,
   fecha_vencimiento: '',
@@ -165,6 +167,8 @@ export default function ComprasPage() {
       monto_bonos: c.monto_bonos ? String(c.monto_bonos) : '',
       monto_otro: c.monto_otro ? String(c.monto_otro) : '',
       gastos: c.gastos != null ? String(c.gastos) : '',
+      costo_flete: c.costo_flete > 0 ? String(c.costo_flete) : '',
+      costo_otros: c.costo_otros > 0 ? String(c.costo_otros) : '',
       notas: c.notas ?? '',
       status_pago: c.status_pago,
       fecha_vencimiento: c.fecha_vencimiento ?? '',
@@ -264,6 +268,8 @@ export default function ComprasPage() {
       monto_bonos: form.forma_pago === 'mixto' ? (parseFloat(form.monto_bonos) || 0) : 0,
       monto_otro: form.forma_pago === 'mixto' ? (parseFloat(form.monto_otro) || 0) : 0,
       gastos: form.gastos ? parseFloat(form.gastos) : 0,
+      costo_flete: parseFloat(form.costo_flete) || 0,
+      costo_otros: parseFloat(form.costo_otros) || 0,
       notas: form.notas || null,
       status_pago: form.status_pago,
       fecha_vencimiento: form.fecha_vencimiento || null,
@@ -537,6 +543,42 @@ export default function ComprasPage() {
             />
           </FormField>
 
+          {/* Costos adicionales (costo aterrizado) */}
+          <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/40">
+            <p className="text-sm font-semibold text-blue-800 mb-2">Costos adicionales</p>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField label="Flete / Envío">
+                <Input
+                  type="number" min="0" step="0.01" placeholder="0.00"
+                  value={form.costo_flete}
+                  onChange={(e) => setForm((f) => ({ ...f, costo_flete: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Otros costos">
+                <Input
+                  type="number" min="0" step="0.01" placeholder="0.00"
+                  value={form.costo_otros}
+                  onChange={(e) => setForm((f) => ({ ...f, costo_otros: e.target.value }))}
+                />
+              </FormField>
+            </div>
+            {(() => {
+              const totalUnidades = items.reduce((s, i) => s + (parseFloat(i.cantidad) || 0), 0)
+              const costoBase = items.reduce((s, i) => s + (parseFloat(i.cantidad) || 0) * (parseFloat(i.precio_unitario) || 0), 0)
+              const flete = parseFloat(form.costo_flete) || 0
+              const otros = parseFloat(form.costo_otros) || 0
+              if ((flete > 0 || otros > 0) && totalUnidades > 0) {
+                const costoAterrizado = (costoBase + flete + otros) / totalUnidades
+                return (
+                  <p className="text-xs text-blue-700 mt-2 font-medium">
+                    Costo real unitario promedio: {new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(costoAterrizado)}
+                  </p>
+                )
+              }
+              return null
+            })()}
+          </div>
+
           <FormField label="Notas">
             <Textarea placeholder="Observaciones opcionales..." value={form.notas} onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))} />
           </FormField>
@@ -666,6 +708,8 @@ export default function ComprasPage() {
                         )}
                         <span>{formatFormaPago(c.forma_pago)}</span>
                         {c.gastos ? <span>+{formatMxn(c.gastos)} gastos</span> : null}
+                        {c.costo_flete > 0 ? <span>flete {formatMxn(c.costo_flete)}</span> : null}
+                        {c.costo_otros > 0 ? <span>otros {formatMxn(c.costo_otros)}</span> : null}
                       </div>
                       {/* Chips de productos */}
                       {compraItems && compraItems.length > 0 && (

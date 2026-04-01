@@ -78,6 +78,8 @@ interface CompraRow {
   monto_bonos: number
   monto_otro: number
   fotos: string[]
+  costo_flete: number
+  costo_otros: number
   created_at: string
   updated_at: string
 }
@@ -536,6 +538,108 @@ interface ChecklistRegistroRow {
 export interface ChecklistRegistro extends ChecklistRegistroRow {
   unidades?: { nombre: string; placa: string | null } | null
   user_profiles?: { nombre: string | null; email: string } | null
+}
+
+// ─── Órdenes de Venta / Pedidos SAE (Fase B) ─────────────────────────────────
+
+export type OrdenVentaStatus = 'borrador' | 'confirmado' | 'surtido' | 'cancelado'
+
+interface OrdenVentaRow {
+  id: string
+  numero: string
+  cliente_id: string | null
+  fecha: string
+  fecha_entrega: string | null
+  status: OrdenVentaStatus
+  subtotal: number
+  iva: number
+  total: number
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface OrdenVentaItemRow {
+  id: string
+  orden_venta_id: string
+  inventario_registro_id: string | null
+  descripcion: string
+  cantidad: number
+  precio_unitario: number
+  descuento_pct: number
+  subtotal: number
+  created_at: string
+}
+
+export interface OrdenVentaItem extends OrdenVentaItemRow {
+  inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida'> | null
+}
+
+export interface OrdenVenta extends OrdenVentaRow {
+  clientes?: { nombre: string } | null
+  ordenes_venta_items?: OrdenVentaItem[]
+}
+
+// ─── Órdenes de Compra SAE (Fase C) ──────────────────────────────────────────
+
+export type OrdenCompraStatus = 'borrador' | 'enviada' | 'recibida_parcial' | 'recibida' | 'cancelada'
+
+interface OrdenCompraRow {
+  id: string
+  numero: string
+  proveedor_id: string | null
+  fecha: string
+  fecha_entrega_esperada: string | null
+  status: OrdenCompraStatus
+  subtotal: number
+  iva: number
+  total: number
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface OrdenCompraItemRow {
+  id: string
+  orden_compra_id: string
+  inventario_registro_id: string | null
+  descripcion: string
+  cantidad: number
+  precio_unitario: number
+  descuento_pct: number
+  subtotal: number
+  created_at: string
+}
+
+export interface OrdenCompraItem extends OrdenCompraItemRow {
+  inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida'> | null
+}
+
+export interface OrdenCompra extends OrdenCompraRow {
+  proveedores?: { nombre: string } | null
+  ordenes_compra_items?: OrdenCompraItem[]
+}
+
+// ─── Inventario Lotes (Fase D) ────────────────────────────────────────────────
+
+export type LoteStatus = 'activo' | 'agotado' | 'caducado'
+
+interface InventarioLoteRow {
+  id: string
+  producto_id: string
+  numero_lote: string
+  fecha_fabricacion: string | null
+  fecha_caducidad: string | null
+  cantidad_inicial: number
+  cantidad_actual: number
+  status: LoteStatus
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InventarioLote extends InventarioLoteRow {
+  inventario_registros?: Pick<InventarioRegistroRow, 'nombre_producto' | 'unidad_medida'> | null
 }
 
 // ─── Tareas ──────────────────────────────────────────────────────────────────

@@ -122,6 +122,30 @@ export async function descargarXml(
   return data.Content as string // base64
 }
 
+// Envía el CFDI timbrado por email al receptor.
+// Facturama endpoint: POST /api/Lite/SendSingleCfdiByMail?cfdiType=issuer&cfdiId={id}&email={email}
+// Verificar URL exacta en swagger de Facturama al conectar con credenciales reales.
+export async function enviarCfdiEmail(
+  config: FacturamaConfig,
+  facturamaId: string,
+  email: string
+): Promise<void> {
+  const params = new URLSearchParams({
+    cfdiType: 'issuer',
+    cfdiId: facturamaId,
+    email,
+  })
+  const url = `${getBaseUrl(config.sandbox)}/api/Lite/SendSingleCfdiByMail?${params}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: getAuthHeader(config.usuario, config.password) },
+  })
+  if (!res.ok) {
+    const err = await res.text()
+    throw new Error(`Facturama email error ${res.status}: ${err}`)
+  }
+}
+
 export async function testConexion(config: FacturamaConfig): Promise<boolean> {
   const url = `${getBaseUrl(config.sandbox)}/api/profile`
   const res = await fetch(url, {

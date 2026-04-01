@@ -353,6 +353,29 @@ export default function VentasPage() {
     const montoFinal = tieneItems ? montoCalculado : 0
     if (!form.fecha) { setError('La fecha es requerida'); return }
     if (!tieneItems && montoFinal === 0) { setError('Agrega productos o un monto total'); return }
+
+    // Validación de límite de crédito — alerta suave (no bloquea)
+    if (form.cliente_id && form.status_pago !== 'pagado') {
+      const clienteActual = clientes.find(c => c.id === form.cliente_id)
+      if (clienteActual && clienteActual.limite_credito > 0) {
+        const { data: pendientes } = await supabase
+          .from('ventas')
+          .select('monto_total, monto_pagado')
+          .eq('cliente_id', form.cliente_id)
+          .in('status_pago', ['pendiente', 'parcial'])
+          .neq('id', editId ?? '')  // excluir la venta actual si se está editando
+        const saldoActual = (pendientes ?? []).reduce((s, v) => s + (v.monto_total - v.monto_pagado), 0)
+        if (saldoActual + montoFinal > clienteActual.limite_credito) {
+          const exceso = formatMxn(saldoActual + montoFinal - clienteActual.limite_credito)
+          const ok = confirm(
+            `⚠️ Este cliente excede su límite de crédito por ${exceso}.\n` +
+            `Saldo actual: ${formatMxn(saldoActual)} / Límite: ${formatMxn(clienteActual.limite_credito)}\n\n¿Continuar de todas formas?`
+          )
+          if (!ok) return
+        }
+      }
+    }
+
     setSaving(true)
     setError('')
 

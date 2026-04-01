@@ -84,6 +84,14 @@ export function generateNumeroPedido(): string {
   return generateFolio('PED')
 }
 
+export function generateNumeroOrdenVenta(): string {
+  return generateFolio('OV')
+}
+
+export function generateNumeroOrdenCompra(): string {
+  return generateFolio('OC')
+}
+
 import type { StatusPago } from '@/lib/types/database.types'
 export function formatStatusPago(s: StatusPago): string {
   const labels: Record<StatusPago, string> = {
