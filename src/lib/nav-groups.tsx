@@ -325,6 +325,15 @@ export const NAV_GROUPS: NavGroup[] = [
           </svg>
         ),
       },
+      {
+        href: '/demo',
+        label: 'Demo SAE',
+        icon: (
+          <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="5,3 19,12 5,21 5,3" />
+          </svg>
+        ),
+      },
     ],
   },
   {
