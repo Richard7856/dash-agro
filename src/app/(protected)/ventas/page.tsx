@@ -80,7 +80,8 @@ export default function VentasPage() {
     const [{ data: ventasData }, { data: personasData }, { data: clientesData }, { data: ubicData }] = await Promise.all([
       supabase
         .from('ventas')
-        .select('*, clientes(nombre), personas(nombre), ubicaciones(nombre), ventas_items(*, inventario_registros(nombre_producto, unidad_medida))')
+        // personas!vendedor_id: hint de FK explícito — ventas tiene dos FKs a personas (persona_id + vendedor_id), PostgREST falla si no se especifica cuál usar
+        .select('*, clientes(nombre), personas:personas!vendedor_id(nombre), ubicaciones(nombre), ventas_items(*, inventario_registros(nombre_producto, unidad_medida))')
         .order('fecha', { ascending: false })
         .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
