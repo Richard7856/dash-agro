@@ -12,6 +12,7 @@ import type { Cliente } from '@/lib/types/database.types'
 const emptyForm = () => ({
   nombre: '', rfc: '', regimen_fiscal: '', codigo_postal: '',
   email: '', telefono: '', notas: '',
+  dias_credito: '', limite_credito: '', descuento_pct: '',
 })
 
 interface VentaHistorial {
@@ -71,6 +72,9 @@ export default function ClientesPage() {
       nombre: c.nombre, rfc: c.rfc ?? '', regimen_fiscal: c.regimen_fiscal ?? '',
       codigo_postal: c.codigo_postal ?? '', email: c.email ?? '',
       telefono: c.telefono ?? '', notas: c.notas ?? '',
+      dias_credito: c.dias_credito > 0 ? String(c.dias_credito) : '',
+      limite_credito: c.limite_credito > 0 ? String(c.limite_credito) : '',
+      descuento_pct: c.descuento_pct > 0 ? String(c.descuento_pct) : '',
     })
     setError(''); setView('form')
   }
@@ -109,6 +113,9 @@ export default function ClientesPage() {
       email: form.email || null,
       telefono: form.telefono || null,
       notas: form.notas || null,
+      dias_credito: form.dias_credito ? parseInt(form.dias_credito) : 0,
+      limite_credito: form.limite_credito ? parseFloat(form.limite_credito) : 0,
+      descuento_pct: form.descuento_pct ? parseFloat(form.descuento_pct) : 0,
     }
     let err
     if (editId) {
@@ -163,6 +170,29 @@ export default function ClientesPage() {
             onChange={(e) => setForm((f) => ({ ...f, notas: e.target.value }))}
             className="nm-input w-full px-3.5 py-2.5 text-[15px] text-[var(--nm-text)] placeholder:text-[var(--nm-text-subtle)] resize-none" />
         </FormField>
+
+        {/* Condiciones comerciales — al estilo SAE */}
+        <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/40">
+          <p className="text-xs font-semibold text-blue-700 mb-2">Condiciones comerciales</p>
+          <div className="grid grid-cols-3 gap-2">
+            <FormField label="Días crédito">
+              <Input type="number" min="0" step="1" placeholder="0"
+                value={form.dias_credito}
+                onChange={(e) => setForm((f) => ({ ...f, dias_credito: e.target.value }))} />
+            </FormField>
+            <FormField label="Límite crédito ($)">
+              <Input type="number" min="0" step="100" placeholder="0"
+                value={form.limite_credito}
+                onChange={(e) => setForm((f) => ({ ...f, limite_credito: e.target.value }))} />
+            </FormField>
+            <FormField label="Descuento auto (%)">
+              <Input type="number" min="0" max="100" step="0.5" placeholder="0"
+                value={form.descuento_pct}
+                onChange={(e) => setForm((f) => ({ ...f, descuento_pct: e.target.value }))} />
+            </FormField>
+          </div>
+        </div>
+
         <div className="flex gap-2 pt-1">
           <Btn type="button" variant="secondary" onClick={() => setView('list')} className="flex-1">Cancelar</Btn>
           <Btn type="submit" loading={saving} className="flex-1">Guardar</Btn>
@@ -197,6 +227,30 @@ export default function ClientesPage() {
           </div>
           <Btn variant="secondary" size="sm" onClick={() => openEdit(c)}>Editar</Btn>
         </div>
+
+        {/* Condiciones comerciales en detail */}
+        {(c.descuento_pct > 0 || c.limite_credito > 0 || c.dias_credito > 0) && (
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {c.descuento_pct > 0 && (
+              <div className="bg-green-50 rounded-xl p-2.5 text-center border border-green-100">
+                <p className="text-xs text-green-600 font-medium">Descuento auto</p>
+                <p className="text-lg font-bold text-green-700">{c.descuento_pct}%</p>
+              </div>
+            )}
+            {c.limite_credito > 0 && (
+              <div className="bg-blue-50 rounded-xl p-2.5 text-center border border-blue-100">
+                <p className="text-xs text-blue-600 font-medium">Límite crédito</p>
+                <p className="text-sm font-bold text-blue-700">{formatMxn(c.limite_credito)}</p>
+              </div>
+            )}
+            {c.dias_credito > 0 && (
+              <div className="bg-gray-50 rounded-xl p-2.5 text-center border border-gray-200">
+                <p className="text-xs text-gray-500 font-medium">Días plazo</p>
+                <p className="text-lg font-bold text-gray-700">{c.dias_credito}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex border-b border-gray-200 mb-4">
@@ -310,6 +364,25 @@ export default function ClientesPage() {
                     {c.rfc && <span>{c.rfc}</span>}
                     {c.telefono && <span>{c.telefono}</span>}
                   </div>
+                  {(c.descuento_pct > 0 || c.limite_credito > 0 || c.dias_credito > 0) && (
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {c.descuento_pct > 0 && (
+                        <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                          {c.descuento_pct}% dto.
+                        </span>
+                      )}
+                      {c.limite_credito > 0 && (
+                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                          Crédito {formatMxn(c.limite_credito)}
+                        </span>
+                      )}
+                      {c.dias_credito > 0 && (
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                          {c.dias_credito}d plazo
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1 shrink-0">
                   <button onClick={() => openDetail(c)} className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg">Ver</button>

@@ -28,6 +28,9 @@ const emptyForm = () => ({
   cantidad: '',
   stock_minimo: '',
   precio_compra_unitario: '',
+  precio_venta_publico: '',
+  precio_distribuidor: '',
+  precio_minimo: '',
   unidad_medida: 'unidad' as UnidadMedida,
   cantidad_por_caja: '',
   cajas_por_tarima: '',
@@ -180,6 +183,9 @@ export default function InventarioPage() {
       cantidad: String(r.cantidad),
       stock_minimo: r.stock_minimo > 0 ? String(r.stock_minimo) : '',
       precio_compra_unitario: String(r.precio_compra_unitario),
+      precio_venta_publico: r.precio_venta_publico > 0 ? String(r.precio_venta_publico) : '',
+      precio_distribuidor: r.precio_distribuidor > 0 ? String(r.precio_distribuidor) : '',
+      precio_minimo: r.precio_minimo > 0 ? String(r.precio_minimo) : '',
       unidad_medida: r.unidad_medida,
       cantidad_por_caja: r.cantidad_por_caja != null ? String(r.cantidad_por_caja) : '',
       cajas_por_tarima: r.cajas_por_tarima != null ? String(r.cajas_por_tarima) : '',
@@ -244,6 +250,9 @@ export default function InventarioPage() {
       stock_minimo: form.stock_minimo ? parseFloat(form.stock_minimo) : 0,
       precio_compra_unitario,
       precio_compra_total,
+      precio_venta_publico: form.precio_venta_publico ? parseFloat(form.precio_venta_publico) : 0,
+      precio_distribuidor: form.precio_distribuidor ? parseFloat(form.precio_distribuidor) : 0,
+      precio_minimo: form.precio_minimo ? parseFloat(form.precio_minimo) : 0,
       unidad_medida: form.unidad_medida,
       cantidad_por_caja: form.cantidad_por_caja ? parseFloat(form.cantidad_por_caja) : null,
       cajas_por_tarima: form.cajas_por_tarima ? parseInt(form.cajas_por_tarima) : null,
@@ -401,7 +410,7 @@ export default function InventarioPage() {
           </FormField>
 
           <div className="grid grid-cols-2 gap-3">
-            <FormField label="Precio unitario" required>
+            <FormField label="Precio compra unitario" required>
               <Input
                 type="number" min="0" step="0.01" placeholder="0.00"
                 value={form.precio_compra_unitario}
@@ -409,11 +418,39 @@ export default function InventarioPage() {
                 required
               />
             </FormField>
-            <FormField label="Precio total">
+            <FormField label="Precio total compra">
               <div className="flex items-center min-h-[44px] px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium text-gray-700">
                 {formatMxn(parseFloat(precioTotal))}
               </div>
             </FormField>
+          </div>
+
+          {/* Precios de venta — al estilo SAE */}
+          <div className="border border-blue-100 rounded-xl p-3 bg-blue-50/40">
+            <p className="text-xs font-semibold text-blue-700 mb-2">Precios de venta</p>
+            <div className="grid grid-cols-3 gap-2">
+              <FormField label="Público">
+                <Input
+                  type="number" min="0" step="0.01" placeholder="0.00"
+                  value={form.precio_venta_publico}
+                  onChange={(e) => setForm((f) => ({ ...f, precio_venta_publico: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Distribuidor">
+                <Input
+                  type="number" min="0" step="0.01" placeholder="0.00"
+                  value={form.precio_distribuidor}
+                  onChange={(e) => setForm((f) => ({ ...f, precio_distribuidor: e.target.value }))}
+                />
+              </FormField>
+              <FormField label="Mínimo">
+                <Input
+                  type="number" min="0" step="0.01" placeholder="0.00"
+                  value={form.precio_minimo}
+                  onChange={(e) => setForm((f) => ({ ...f, precio_minimo: e.target.value }))}
+                />
+              </FormField>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -796,9 +833,33 @@ export default function InventarioPage() {
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-sm">
                         <span className="text-gray-600">{r.cantidad} {r.unidad_medida}</span>
+                        {r.stock_minimo > 0 && (
+                          <span className={`text-xs ${stockBajo ? 'text-orange-600 font-medium' : 'text-gray-400'}`}>
+                            mín {r.stock_minimo}
+                          </span>
+                        )}
                         <span className="text-[var(--nm-text-subtle)]">·</span>
                         <span className="font-medium text-gray-800">{formatMxn(r.precio_compra_total)}</span>
                       </div>
+                      {(r.precio_venta_publico > 0 || r.precio_distribuidor > 0 || r.precio_minimo > 0) && (
+                        <div className="flex flex-wrap gap-2 mt-1.5">
+                          {r.precio_venta_publico > 0 && (
+                            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                              Público {formatMxn(r.precio_venta_publico)}
+                            </span>
+                          )}
+                          {r.precio_distribuidor > 0 && (
+                            <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">
+                              Dist. {formatMxn(r.precio_distribuidor)}
+                            </span>
+                          )}
+                          {r.precio_minimo > 0 && (
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                              Mín {formatMxn(r.precio_minimo)}
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-x-3 mt-1 text-xs text-[var(--nm-text-subtle)]">
                         <span>Alta: {formatDate(r.created_at.split('T')[0])}</span>
                         {r.fecha_caducidad && (

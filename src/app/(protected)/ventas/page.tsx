@@ -23,7 +23,11 @@ interface VentaItemLocal {
   nombre: string
   unidad: UnidadMedida
   disponible: number
+  stock_minimo: number
   precio_compra: number
+  precio_venta_publico: number
+  precio_distribuidor: number
+  precio_minimo_prod: number
   lote: string | null
   cantidad: string
   precio_unitario: string
@@ -80,7 +84,7 @@ export default function VentasPage() {
         .order('fecha', { ascending: false })
         .limit(500),
       supabase.from('personas').select('*').eq('activo', true).order('nombre'),
-      supabase.from('clientes').select('id, nombre').eq('activo', true).order('nombre'),
+      supabase.from('clientes').select('id, nombre, descuento_pct, limite_credito, dias_credito').eq('activo', true).order('nombre'),
       supabase.from('ubicaciones').select('*').eq('activo', true).order('nombre'),
     ])
     setVentas((ventasData ?? []) as Venta[])
@@ -91,6 +95,21 @@ export default function VentasPage() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Al cambiar cliente: aplica su descuento a todos los items con precio público definido
+  useEffect(() => {
+    if (!form.cliente_id || items.length === 0) return
+    const cliente = clientes.find((c) => c.id === form.cliente_id) as (Cliente & { descuento_pct: number }) | undefined
+    const descPct = cliente?.descuento_pct ?? 0
+    if (descPct <= 0) return
+    setItems((prev) => prev.map((item) => {
+      if (item.precio_venta_publico <= 0) return item
+      const nuevo = parseFloat((item.precio_venta_publico * (1 - descPct / 100)).toFixed(2))
+      return { ...item, precio_unitario: String(nuevo) }
+    }))
+  // Solo cuando cambia el cliente — no en cada render de items
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.cliente_id])
 
   // Buscar productos en inventario (debounced)
   useEffect(() => {
@@ -241,15 +260,19 @@ export default function VentasPage() {
     // Cargar items existentes con stock actual
     const { data: existingItems } = await supabase
       .from('ventas_items')
-      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, precio_compra_unitario, ean, sku, numero_lote)')
+      .select('*, inventario_registros(nombre_producto, unidad_medida, cantidad, stock_minimo, precio_compra_unitario, precio_venta_publico, precio_distribuidor, precio_minimo, ean, sku, numero_lote)')
       .eq('venta_id', v.id)
 
     const loaded: VentaItemLocal[] = (existingItems ?? []).map((it: any) => ({
       inventario_registro_id: it.inventario_registro_id,
       nombre: it.inventario_registros?.nombre_producto ?? '',
       unidad: it.inventario_registros?.unidad_medida ?? 'unidad',
-      disponible: (it.inventario_registros?.cantidad ?? 0) + it.cantidad, // restore = actual + lo que ya se vendió
+      disponible: (it.inventario_registros?.cantidad ?? 0) + it.cantidad,
+      stock_minimo: it.inventario_registros?.stock_minimo ?? 0,
       precio_compra: it.inventario_registros?.precio_compra_unitario ?? 0,
+      precio_venta_publico: it.inventario_registros?.precio_venta_publico ?? 0,
+      precio_distribuidor: it.inventario_registros?.precio_distribuidor ?? 0,
+      precio_minimo_prod: it.inventario_registros?.precio_minimo ?? 0,
       lote: it.inventario_registros?.numero_lote ?? null,
       cantidad: String(it.cantidad),
       precio_unitario: String(it.precio_unitario),
@@ -266,15 +289,27 @@ export default function VentasPage() {
   function agregarProducto(p: InventarioRegistro) {
     // No duplicar el mismo lote
     if (items.some((i) => i.inventario_registro_id === p.id)) return
+    // Pre-llenar precio con precio_venta_publico si existe; si no, vacío
+    const precioSugerido = p.precio_venta_publico > 0 ? String(p.precio_venta_publico) : ''
+    // Aplicar descuento del cliente si está seleccionado
+    const clienteActual = clientes.find((c) => c.id === form.cliente_id) as (Cliente & { descuento_pct: number }) | undefined
+    const descPct = clienteActual?.descuento_pct ?? 0
+    const precioConDescuento = precioSugerido && descPct > 0
+      ? String(parseFloat(precioSugerido) * (1 - descPct / 100))
+      : precioSugerido
     setItems((prev) => [...prev, {
       inventario_registro_id: p.id,
       nombre: p.nombre_producto,
       unidad: p.unidad_medida,
       disponible: p.cantidad,
+      stock_minimo: p.stock_minimo,
       precio_compra: p.precio_compra_unitario,
+      precio_venta_publico: p.precio_venta_publico,
+      precio_distribuidor: p.precio_distribuidor,
+      precio_minimo_prod: p.precio_minimo,
       lote: p.numero_lote ?? null,
       cantidad: '1',
-      precio_unitario: '',
+      precio_unitario: precioConDescuento,
     }])
     setBusquedaProducto('')
     setProductosResultados([])
@@ -482,22 +517,41 @@ export default function VentasPage() {
             {buscandoProducto && <p className="text-xs text-[var(--nm-text-subtle)] px-1 mb-2">Buscando…</p>}
             {productosResultados.length > 0 && (
               <div className="border border-gray-200 rounded-lg overflow-hidden mb-2">
-                {productosResultados.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => agregarProducto(p)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0 border-gray-100 text-left"
-                  >
-                    <div>
-                      <span className="font-medium text-[var(--nm-text)]">{p.nombre_producto}</span>
-                      {p.numero_lote && <span className="text-xs text-[var(--nm-text-subtle)] ml-2">Lote: {p.numero_lote}</span>}
-                    </div>
-                    <span className={`text-xs font-semibold ml-2 shrink-0 ${p.cantidad <= 0 ? 'text-red-500' : 'text-blue-700'}`}>
-                      {p.cantidad} {p.unidad_medida}
-                    </span>
-                  </button>
-                ))}
+                {productosResultados.map((p) => {
+                  const stockBajoSearch = p.stock_minimo > 0 && p.cantidad <= p.stock_minimo
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => agregarProducto(p)}
+                      className="w-full flex items-start justify-between px-3 py-2 text-sm hover:bg-blue-50 border-b last:border-b-0 border-gray-100 text-left gap-2"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium text-[var(--nm-text)]">{p.nombre_producto}</span>
+                        {p.numero_lote && <span className="text-xs text-[var(--nm-text-subtle)] ml-2">Lote: {p.numero_lote}</span>}
+                        {(p.precio_venta_publico > 0 || p.precio_distribuidor > 0) && (
+                          <div className="flex gap-1.5 mt-0.5 flex-wrap">
+                            {p.precio_venta_publico > 0 && (
+                              <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0 rounded-full">Púb. {formatMxn(p.precio_venta_publico)}</span>
+                            )}
+                            {p.precio_distribuidor > 0 && (
+                              <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0 rounded-full">Dist. {formatMxn(p.precio_distribuidor)}</span>
+                            )}
+                            {p.precio_minimo > 0 && (
+                              <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0 rounded-full">Mín. {formatMxn(p.precio_minimo)}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className={`text-xs font-semibold ${p.cantidad <= 0 ? 'text-red-500' : stockBajoSearch ? 'text-orange-500' : 'text-blue-700'}`}>
+                          {p.cantidad} {p.unidad_medida}
+                        </span>
+                        {stockBajoSearch && <p className="text-[10px] text-orange-500">Stock bajo</p>}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
 
@@ -508,18 +562,27 @@ export default function VentasPage() {
                   const cant = parseFloat(item.cantidad) || 0
                   const precio = parseFloat(item.precio_unitario) || 0
                   const subtotal = cant * precio
-                  const stockBajo = cant > item.disponible
+                  const sinStock = cant > item.disponible
+                  const stockMinBajo = item.stock_minimo > 0 && item.disponible <= item.stock_minimo
+                  const tienePrecios = item.precio_venta_publico > 0 || item.precio_distribuidor > 0 || item.precio_minimo_prod > 0
+                  // Precio mínimo para alerta visual
+                  const bajoPrecioMinimo = item.precio_minimo_prod > 0 && precio < item.precio_minimo_prod && precio > 0
                   return (
-                    <div key={item.inventario_registro_id} className={`rounded-lg p-2 border text-sm ${stockBajo ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                    <div key={item.inventario_registro_id} className={`rounded-lg p-2 border text-sm ${sinStock ? 'bg-amber-50 border-amber-200' : stockMinBajo ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-[var(--nm-text)] truncate">{item.nombre}</p>
                           {item.lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {item.lote}</p>}
                           <p className="text-xs text-gray-400 mt-0.5">
-                            Stock: {item.disponible} {item.unidad} · Costo: {formatMxn(item.precio_compra)}
+                            Stock: {item.disponible} {item.unidad}
+                            {item.stock_minimo > 0 && <span className={stockMinBajo ? ' · ⚠ mín {item.stock_minimo}' : ` · mín ${item.stock_minimo}`}> · mín {item.stock_minimo}</span>}
+                            {' · '}Costo: {formatMxn(item.precio_compra)}
                           </p>
-                          {stockBajo && (
+                          {sinStock && (
                             <p className="text-xs text-amber-600 font-medium">⚠ Solo {item.disponible} {item.unidad} disponibles</p>
+                          )}
+                          {!sinStock && stockMinBajo && (
+                            <p className="text-xs text-orange-600 font-medium">⚠ Stock por debajo del mínimo</p>
                           )}
                         </div>
                         <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0 mt-0.5">
@@ -528,6 +591,35 @@ export default function VentasPage() {
                           </svg>
                         </button>
                       </div>
+
+                      {/* Selector rápido de lista de precio */}
+                      {tienePrecios && (
+                        <div className="flex gap-1 mt-1.5 flex-wrap">
+                          <span className="text-[10px] text-gray-400 self-center mr-0.5">Aplicar:</span>
+                          {item.precio_venta_publico > 0 && (
+                            <button type="button"
+                              onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_venta_publico) } : it))}
+                              className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium">
+                              Público {formatMxn(item.precio_venta_publico)}
+                            </button>
+                          )}
+                          {item.precio_distribuidor > 0 && (
+                            <button type="button"
+                              onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_distribuidor) } : it))}
+                              className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium">
+                              Dist. {formatMxn(item.precio_distribuidor)}
+                            </button>
+                          )}
+                          {item.precio_minimo_prod > 0 && (
+                            <button type="button"
+                              onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_minimo_prod) } : it))}
+                              className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 font-medium">
+                              Mín {formatMxn(item.precio_minimo_prod)}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <div>
                           <label className="text-xs text-[var(--nm-text-subtle)]">Cantidad ({item.unidad})</label>
@@ -544,8 +636,11 @@ export default function VentasPage() {
                             type="number" min="0" step="0.01" placeholder="0.00"
                             value={item.precio_unitario}
                             onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: e.target.value } : it))}
-                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
+                            className={`w-full mt-0.5 px-2 py-1.5 text-sm border rounded-lg bg-white focus:outline-none focus:border-blue-500 ${bajoPrecioMinimo ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
                           />
+                          {bajoPrecioMinimo && (
+                            <p className="text-[10px] text-red-500 mt-0.5">Por debajo del precio mínimo</p>
+                          )}
                         </div>
                       </div>
                       {subtotal > 0 && (
@@ -629,6 +724,29 @@ export default function VentasPage() {
               onChange={(id) => setForm((f) => ({ ...f, cliente_id: id }))}
               placeholder="Buscar cliente…"
             />
+            {form.cliente_id && (() => {
+              const cl = clientes.find((c) => c.id === form.cliente_id) as (Cliente & { descuento_pct: number; limite_credito: number; dias_credito: number }) | undefined
+              if (!cl) return null
+              return (
+                <div className="flex gap-2 mt-1.5 flex-wrap">
+                  {cl.descuento_pct > 0 && (
+                    <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full font-medium">
+                      {cl.descuento_pct}% descuento auto aplicado
+                    </span>
+                  )}
+                  {cl.limite_credito > 0 && (
+                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                      Crédito máx {formatMxn(cl.limite_credito)}
+                    </span>
+                  )}
+                  {cl.dias_credito > 0 && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                      {cl.dias_credito}d plazo
+                    </span>
+                  )}
+                </div>
+              )
+            })()}
           </FormField>
 
           {vendedores.length > 0 && (

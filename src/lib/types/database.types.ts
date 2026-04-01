@@ -38,6 +38,9 @@ interface ClienteRow {
   telefono: string | null
   notas: string | null
   activo: boolean
+  dias_credito: number
+  limite_credito: number
+  descuento_pct: number
   created_at: string
   updated_at: string
 }
@@ -158,6 +161,9 @@ interface InventarioRegistroRow {
   stock_minimo: number
   precio_compra_unitario: number
   precio_compra_total: number
+  precio_venta_publico: number
+  precio_distribuidor: number
+  precio_minimo: number
   numero_lote: string | null
   fecha_caducidad: string | null
   cantidad_por_caja: number | null
