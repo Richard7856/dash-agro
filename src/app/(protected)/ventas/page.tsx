@@ -47,7 +47,7 @@ const emptyForm = () => ({
   gastos_extras: '',
   notas: '',
   status_pago: 'pagado' as StatusPago,
-  fecha_vencimiento: '',
+  fecha_vencimiento: todayISO(), // default pagado → vence hoy mismo
 })
 
 export default function VentasPage() {
