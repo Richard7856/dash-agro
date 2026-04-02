@@ -415,6 +415,68 @@ export default function InventarioPage() {
     win.document.close()
   }
 
+  // Descarga CSV completo (todos los campos) con el filtro de almacén activo
+  async function exportarCSV() {
+    const { data } = await applyFilters(
+      supabase
+        .from('inventario_registros')
+        .select('*, ubicaciones(nombre)')
+        .order('created_at', { ascending: false })
+        .limit(10000)
+    )
+    const rows = (data ?? []) as unknown as (InventarioRegistro & { ubicaciones?: { nombre: string } | null })[]
+
+    const escape = (v: unknown) => {
+      const s = v == null ? '' : String(v)
+      // Envolver en comillas si tiene coma, comilla o salto de línea
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"` : s
+    }
+
+    const headers = [
+      'ID', 'EAN', 'SKU', 'Nombre', 'Cantidad', 'Unidad', 'Stock mínimo',
+      'Precio compra unitario', 'Precio compra total',
+      'Precio venta público', 'Precio distribuidor', 'Precio mínimo',
+      'Número lote', 'Fecha caducidad', 'Caducado',
+      'Cantidad por caja', 'Cajas por tarima',
+      'Almacén', 'Fecha alta', 'Última actualización',
+    ]
+
+    const today = new Date().toISOString().split('T')[0]
+    const expiryLabel = (fecha: string | null) => {
+      const s = getExpiryStatus(fecha)
+      if (s === 'expired') return 'Caducado'
+      if (s === 'soon') return 'Próximo'
+      if (s === 'ok') return 'Vigente'
+      return ''
+    }
+
+    const lines = rows.map((r) => [
+      r.id, r.ean, r.sku, r.nombre_producto,
+      r.cantidad, r.unidad_medida, r.stock_minimo,
+      r.precio_compra_unitario, r.precio_compra_total,
+      r.precio_venta_publico, r.precio_distribuidor, r.precio_minimo,
+      r.numero_lote, r.fecha_caducidad, expiryLabel(r.fecha_caducidad ?? null),
+      r.cantidad_por_caja, r.cajas_por_tarima,
+      r.ubicaciones?.nombre,
+      r.created_at?.split('T')[0], r.updated_at?.split('T')[0],
+    ].map(escape).join(','))
+
+    const csv = [headers.join(','), ...lines].join('\n')
+    const almacenSlug = filtroUbicacion
+      ? (ubicaciones.find((u) => u.id === filtroUbicacion)?.nombre ?? 'almacen').replace(/\s+/g, '_')
+      : 'todos'
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }) // BOM para Excel
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `inventario_${almacenSlug}_${today}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast({ message: `CSV exportado — ${rows.length} registros`, type: 'success' })
+  }
+
   const totalPages = Math.ceil(totalCount / pageSize)
   const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
   const hasta = Math.min(page * pageSize, totalCount)
@@ -749,6 +811,17 @@ export default function InventarioPage() {
               </div>
             )}
           </div>
+          {/* Exportar CSV */}
+          <button
+            onClick={exportarCSV}
+            title="Descargar CSV completo"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-blue-400 hover:text-blue-600"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6M3 21h18M3 10l9-7 9 7M4 10v11"/>
+            </svg>
+            CSV
+          </button>
         </div>
 
         {/* Panel de filtros colapsable */}
