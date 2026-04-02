@@ -86,6 +86,7 @@ export default function InventarioPage() {
   const [totalCantidad, setTotalCantidad] = useState(0)
   const [totalValor, setTotalValor] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [showPdfMenu, setShowPdfMenu] = useState(false)
 
   useEffect(() => {
     setHasCamera(typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
@@ -328,28 +329,40 @@ export default function InventarioPage() {
     setBusqueda(''); setDebouncedBusqueda(''); setFiltroVencimiento(''); setFiltroDesde(''); setFiltroHasta(''); setFiltroUbicacion('')
   }
 
-  // Descarga PDF con todos los registros del filtro activo (no solo la página)
-  async function exportarPDF() {
-    const { data } = await applyFilters(
+  const PDF_SHEET_SIZE = 100
+
+  // offset=null → descarga todos; offset=N → descarga hoja de 100 a partir de N
+  async function exportarPDF(offset: number | null = null) {
+    setShowPdfMenu(false)
+    let q = applyFilters(
       supabase
         .from('inventario_registros')
         .select('nombre_producto, cantidad, unidad_medida, precio_venta_publico, fecha_caducidad, ubicaciones(nombre)')
         .order('nombre_producto', { ascending: true })
-        .limit(2000)
     )
-    const rows = (data ?? []) as {
+    if (offset !== null) {
+      q = (q as any).range(offset, offset + PDF_SHEET_SIZE - 1)
+    } else {
+      q = (q as any).limit(2000)
+    }
+    const { data } = await q
+    type PdfRow = {
       nombre_producto: string
       cantidad: number | null
       unidad_medida: string
       precio_venta_publico: number | null
       fecha_caducidad: string | null
       ubicaciones: { nombre: string }[] | null
-    }[]
+    }
+    const rows = (data ?? []) as unknown as PdfRow[]
 
     const today = new Date().toISOString().split('T')[0]
     const almacenLabel = filtroUbicacion
       ? (ubicaciones.find((u) => u.id === filtroUbicacion)?.nombre ?? 'Almacén')
       : 'Todos los almacenes'
+    const sheetLabel = offset !== null
+      ? ` — Hoja ${Math.floor(offset / PDF_SHEET_SIZE) + 1} (registros ${offset + 1}–${offset + rows.length})`
+      : ''
 
     const statusBadge = (fecha: string | null) => {
       const s = getExpiryStatus(fecha)
@@ -381,7 +394,7 @@ export default function InventarioPage() {
         tr:nth-child(even) td { background: #f8fafc; }
         @media print { @page { margin: 1cm; } }
       </style></head><body>
-      <h2>Inventario — ${almacenLabel}</h2>
+      <h2>Inventario — ${almacenLabel}${sheetLabel}</h2>
       <p class="sub">Generado: ${today} · ${rows.length} producto${rows.length !== 1 ? 's' : ''}</p>
       <table>
         <thead><tr>
@@ -697,17 +710,45 @@ export default function InventarioPage() {
               </span>
             )}
           </button>
-          {/* Exportar PDF */}
-          <button
-            onClick={exportarPDF}
-            title="Descargar PDF del inventario"
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-blue-400 hover:text-blue-600"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17a3 3 0 003 3h12a3 3 0 003-3V7a3 3 0 00-3-3H9l-6 6v7z"/>
-            </svg>
-            PDF
-          </button>
+          {/* Exportar PDF — menú de hojas */}
+          <div className="relative">
+            <button
+              onClick={() => setShowPdfMenu((v) => !v)}
+              title="Descargar PDF del inventario"
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors ${showPdfMenu ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-blue-400 hover:text-blue-600'}`}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17a3 3 0 003 3h12a3 3 0 003-3V7a3 3 0 00-3-3H9l-6 6v7z"/>
+              </svg>
+              PDF
+            </button>
+            {showPdfMenu && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[180px]">
+                {/* Opción: todas las hojas */}
+                <button
+                  onClick={() => exportarPDF(null)}
+                  className="w-full text-left px-4 py-2 text-sm text-[var(--nm-text)] hover:bg-blue-50 hover:text-blue-600 font-medium"
+                >
+                  Todo ({totalCount} registros)
+                </button>
+                <div className="border-t border-gray-100 my-1" />
+                {/* Una opción por cada hoja de PDF_SHEET_SIZE registros */}
+                {Array.from({ length: Math.ceil(totalCount / PDF_SHEET_SIZE) }, (_, i) => {
+                  const from = i * PDF_SHEET_SIZE
+                  const to = Math.min(from + PDF_SHEET_SIZE, totalCount)
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => exportarPDF(from)}
+                      className="w-full text-left px-4 py-2 text-sm text-[var(--nm-text)] hover:bg-blue-50 hover:text-blue-600"
+                    >
+                      Hoja {i + 1} — registros {from + 1}–{to}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Panel de filtros colapsable */}
