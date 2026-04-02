@@ -338,7 +338,7 @@ export default function InventarioPage() {
       supabase
         .from('inventario_registros')
         .select('nombre_producto, cantidad, unidad_medida, precio_venta_publico, fecha_caducidad, ubicaciones(nombre)')
-        .order('nombre_producto', { ascending: true })
+        .order('created_at', { ascending: false })
     )
     if (offset !== null) {
       q = (q as any).range(offset, offset + PDF_SHEET_SIZE - 1)
