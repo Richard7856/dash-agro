@@ -328,6 +328,80 @@ export default function InventarioPage() {
     setBusqueda(''); setDebouncedBusqueda(''); setFiltroVencimiento(''); setFiltroDesde(''); setFiltroHasta(''); setFiltroUbicacion('')
   }
 
+  // Descarga PDF con todos los registros del filtro activo (no solo la página)
+  async function exportarPDF() {
+    const { data } = await applyFilters(
+      supabase
+        .from('inventario_registros')
+        .select('nombre_producto, cantidad, unidad_medida, precio_venta_publico, fecha_caducidad, ubicaciones(nombre)')
+        .order('nombre_producto', { ascending: true })
+        .limit(2000)
+    )
+    const rows = (data ?? []) as {
+      nombre_producto: string
+      cantidad: number | null
+      unidad_medida: string
+      precio_venta_publico: number | null
+      fecha_caducidad: string | null
+      ubicaciones: { nombre: string }[] | null
+    }[]
+
+    const today = new Date().toISOString().split('T')[0]
+    const almacenLabel = filtroUbicacion
+      ? (ubicaciones.find((u) => u.id === filtroUbicacion)?.nombre ?? 'Almacén')
+      : 'Todos los almacenes'
+
+    const statusBadge = (fecha: string | null) => {
+      const s = getExpiryStatus(fecha)
+      if (s === 'expired') return '<span style="background:#fee2e2;color:#b91c1c;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">CADUCADO</span>'
+      if (s === 'soon') return '<span style="background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">PRÓX</span>'
+      if (s === 'ok') return '<span style="background:#dcfce7;color:#166534;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;">OK</span>'
+      return '<span style="color:#9ca3af;font-size:10px;">—</span>'
+    }
+
+    const filas = rows.map((r) => `
+      <tr>
+        <td>${r.nombre_producto}</td>
+        <td style="text-align:right;">${r.cantidad ?? 0} ${r.unidad_medida}</td>
+        <td style="text-align:right;">${r.precio_venta_publico != null ? `$${r.precio_venta_publico.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</td>
+        <td style="text-align:center;">${r.fecha_caducidad ? r.fecha_caducidad : '—'}</td>
+        <td style="text-align:center;">${statusBadge(r.fecha_caducidad)}</td>
+        <td>${r.ubicaciones?.[0]?.nombre ?? '—'}</td>
+      </tr>`).join('')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Inventario — ${almacenLabel}</title>
+      <style>
+        body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #111; }
+        h2 { margin: 0 0 2px; font-size: 16px; }
+        p.sub { margin: 0 0 12px; font-size: 11px; color: #555; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #1e40af; color: #fff; padding: 5px 8px; text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+        td { padding: 4px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
+        tr:nth-child(even) td { background: #f8fafc; }
+        @media print { @page { margin: 1cm; } }
+      </style></head><body>
+      <h2>Inventario — ${almacenLabel}</h2>
+      <p class="sub">Generado: ${today} · ${rows.length} producto${rows.length !== 1 ? 's' : ''}</p>
+      <table>
+        <thead><tr>
+          <th>Producto</th><th style="text-align:right;">Cantidad</th>
+          <th style="text-align:right;">Precio público</th>
+          <th style="text-align:center;">Caducidad</th>
+          <th style="text-align:center;">Estado</th>
+          <th>Almacén</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+      <script>window.onload=()=>{ window.print(); window.onafterprint=()=>window.close() }<\/script>
+      </body></html>`
+
+    const win = window.open('', '_blank')
+    if (!win) { toast({ type: 'error', message: 'Permite ventanas emergentes para exportar PDF' }); return }
+    win.document.write(html)
+    win.document.close()
+  }
+
   const totalPages = Math.ceil(totalCount / pageSize)
   const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
   const hasta = Math.min(page * pageSize, totalCount)
@@ -622,6 +696,17 @@ export default function InventarioPage() {
                 {filtrosActivos}
               </span>
             )}
+          </button>
+          {/* Exportar PDF */}
+          <button
+            onClick={exportarPDF}
+            title="Descargar PDF del inventario"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-blue-400 hover:text-blue-600"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17a3 3 0 003 3h12a3 3 0 003-3V7a3 3 0 00-3-3H9l-6 6v7z"/>
+            </svg>
+            PDF
           </button>
         </div>
 

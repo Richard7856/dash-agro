@@ -54,13 +54,43 @@ interface MesData {
 
 interface TopItem { nombre: string; total: number }
 
-type Period = 'hoy' | 'semana' | 'mes' | 'anual'
+type Period = 'hoy' | 'semana' | 'mes' | 'anual' | 'personalizado'
 
 // ─── component ──────────────────────────────────────────────────────────────
+
+function getPeriodRange(p: Exclude<Period, 'personalizado'>): { desde: string; hasta: string } {
+  const now = new Date()
+  const hasta = todayStr()
+  switch (p) {
+    case 'hoy': return { desde: hasta, hasta }
+    case 'semana': {
+      const d = new Date(now)
+      d.setDate(d.getDate() - 7)
+      return { desde: d.toISOString().split('T')[0], hasta }
+    }
+    case 'mes': {
+      const { inicio, fin } = rangoMes(curMonth())
+      return { desde: inicio, hasta: fin }
+    }
+    case 'anual': {
+      return { desde: `${now.getFullYear()}-01-01`, hasta }
+    }
+  }
+}
+
+// Computa desde/hasta según el período seleccionado o fechas personalizadas
+function computeRange(p: Period, cDesde: string, cHasta: string): { desde: string; hasta: string } {
+  if (p === 'personalizado') return { desde: cDesde || todayStr(), hasta: cHasta || todayStr() }
+  return getPeriodRange(p)
+}
 
 export default function FinanzasPage() {
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<Period>('mes')
+  // Fechas personalizadas — se inicializan con el mes actual para tener valores al cambiar a "personalizado"
+  const { inicio: mesInicio, fin: mesFin } = rangoMes(curMonth())
+  const [customDesde, setCustomDesde] = useState(mesInicio)
+  const [customHasta, setCustomHasta] = useState(mesFin)
 
   // Summary numbers for selected period
   const [ventas, setVentas] = useState(0)
@@ -91,29 +121,8 @@ export default function FinanzasPage() {
 
   // ─── load period data ───────────────────────────────────────────────────
 
-  function getPeriodRange(p: Period): { desde: string; hasta: string } {
-    const now = new Date()
-    const hasta = todayStr()
-    switch (p) {
-      case 'hoy': return { desde: hasta, hasta }
-      case 'semana': {
-        const d = new Date(now)
-        d.setDate(d.getDate() - 7)
-        return { desde: d.toISOString().split('T')[0], hasta }
-      }
-      case 'mes': {
-        const { inicio, fin } = rangoMes(curMonth())
-        return { desde: inicio, hasta: fin }
-      }
-      case 'anual': {
-        return { desde: `${now.getFullYear()}-01-01`, hasta }
-      }
-    }
-  }
-
-  const loadPeriod = useCallback(async (p: Period) => {
-    const { desde, hasta } = getPeriodRange(p)
-
+  // Recibe fechas explícitas para que el mismo código sirva para períodos fijos y personalizados
+  const loadPeriod = useCallback(async (desde: string, hasta: string) => {
     const [
       { data: vData },
       { data: cData },
@@ -138,7 +147,8 @@ export default function FinanzasPage() {
 
   // ─── load always data (inventario, CxC, CxP, trend, top) ───────────────
 
-  const loadGlobal = useCallback(async () => {
+  // topDesde/topHasta: rango para los rankings (clientes, proveedores, gastos, productos)
+  const loadGlobal = useCallback(async (topDesde: string, topHasta: string) => {
     // Inventario
     const { data: inv } = await supabase
       .from('inventario_registros')
@@ -180,12 +190,11 @@ export default function FinanzasPage() {
     trendResults.sort((a, b) => a.mes.localeCompare(b.mes))
     setMeses(trendResults)
 
-    // Top clientes (current month)
-    const { inicio: mInicio, fin: mFin } = rangoMes(curMonth())
+    // Top clientes — usa el rango del período seleccionado
     const { data: ventasDetalle } = await supabase
       .from('ventas')
       .select('monto_total, clientes(nombre)')
-      .gte('fecha', mInicio).lte('fecha', mFin)
+      .gte('fecha', topDesde).lte('fecha', topHasta)
     const cMap = new Map<string, number>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const v of (ventasDetalle ?? []) as any[]) {
@@ -198,7 +207,7 @@ export default function FinanzasPage() {
     const { data: comprasDetalle } = await supabase
       .from('compras')
       .select('monto_total, proveedores(nombre)')
-      .gte('fecha', mInicio).lte('fecha', mFin)
+      .gte('fecha', topDesde).lte('fecha', topHasta)
     const pMap = new Map<string, number>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const c of (comprasDetalle ?? []) as any[]) {
@@ -211,7 +220,7 @@ export default function FinanzasPage() {
     const { data: gastosDetalle } = await supabase
       .from('gastos')
       .select('monto, categoria')
-      .gte('fecha', mInicio).lte('fecha', mFin)
+      .gte('fecha', topDesde).lte('fecha', topHasta)
     const gMap = new Map<string, number>()
     for (const g of gastosDetalle ?? []) {
       const cat = (g.categoria as string) ?? 'Sin categoría'
@@ -219,11 +228,11 @@ export default function FinanzasPage() {
     }
     setTopGastos(Array.from(gMap.entries()).map(([nombre, total]) => ({ nombre, total })).sort((a, b) => b.total - a.total).slice(0, 5))
 
-    // Top productos vendidos (by inventario nombre)
+    // Top productos vendidos
     const { data: ventasItems } = await supabase
       .from('ventas_items')
       .select('total, inventario_registros(nombre_producto)')
-      .gte('created_at', mInicio)
+      .gte('created_at', topDesde)
     const prMap = new Map<string, number>()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const vi of (ventasItems ?? []) as any[]) {
@@ -256,21 +265,23 @@ export default function FinanzasPage() {
     }
     setGastosDiarios(dias)
 
-    // Merma del mes
+    // Merma del período
     const { data: mermaData } = await supabase
       .from('merma_registros')
       .select('valor_perdido')
-      .gte('fecha', mInicio).lte('fecha', mFin)
+      .gte('fecha', topDesde).lte('fecha', topHasta)
     setTotalMerma((mermaData ?? []).reduce((s, r) => s + (r.valor_perdido as number), 0))
   }, [])
 
   // ─── effects ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    Promise.all([loadPeriod(period), loadGlobal()]).then(() => setLoading(false))
-  }, [loadPeriod, loadGlobal, period])
-
-  useEffect(() => { loadPeriod(period) }, [period, loadPeriod])
+    // Para personalizado esperar que ambas fechas estén definidas
+    if (period === 'personalizado' && (!customDesde || !customHasta)) return
+    const { desde, hasta } = computeRange(period, customDesde, customHasta)
+    setLoading(true)
+    Promise.all([loadPeriod(desde, hasta), loadGlobal(desde, hasta)]).then(() => setLoading(false))
+  }, [period, customDesde, customHasta, loadPeriod, loadGlobal])
 
   // ─── derived ──────────────────────────────────────────────────────────────
 
@@ -290,14 +301,38 @@ export default function FinanzasPage() {
       </div>
 
       {/* Period selector */}
-      <div className="flex gap-1 mb-5 bg-gray-100 rounded-xl p-1">
-        {([['hoy', 'Hoy'], ['semana', '7 días'], ['mes', 'Mes'], ['anual', 'Año']] as [Period, string][]).map(([key, label]) => (
+      <div className="flex gap-1 mb-3 bg-gray-100 rounded-xl p-1">
+        {([['hoy', 'Hoy'], ['semana', '7d'], ['mes', 'Mes'], ['anual', 'Año'], ['personalizado', '📅']] as [Period, string][]).map(([key, label]) => (
           <button key={key} onClick={() => setPeriod(key)}
             className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${period === key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             {label}
           </button>
         ))}
       </div>
+
+      {/* Custom date range pickers */}
+      {period === 'personalizado' && (
+        <div className="flex gap-2 mb-4 items-center">
+          <div className="flex-1">
+            <label className="text-[10px] text-gray-400 uppercase tracking-wider block mb-1">Desde</label>
+            <input
+              type="date"
+              value={customDesde}
+              onChange={e => setCustomDesde(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-[10px] text-gray-400 uppercase tracking-wider block mb-1">Hasta</label>
+            <input
+              type="date"
+              value={customHasta}
+              onChange={e => setCustomHasta(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Main KPIs */}
       <div className="grid grid-cols-2 gap-3 mb-4">
@@ -425,16 +460,20 @@ export default function FinanzasPage() {
       </div>
 
       {/* Top lists */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Top clientes */}
-        <TopList title="Top clientes (mes)" items={topClientes} color="blue" />
-        {/* Top proveedores */}
-        <TopList title="Top proveedores (mes)" items={topProveedores} color="gray" />
-        {/* Top gastos */}
-        <TopList title="Gastos por categoría (mes)" items={topGastos} color="red" />
-        {/* Top productos */}
-        <TopList title="Productos más vendidos (mes)" items={topProductos} color="green" />
-      </div>
+      {(() => {
+        const { desde, hasta } = computeRange(period, customDesde, customHasta)
+        const rangeLabel = period === 'personalizado'
+          ? `${desde} – ${hasta}`
+          : { hoy: 'hoy', semana: '7 días', mes: 'mes', anual: 'año', personalizado: '' }[period]
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <TopList title={`Top clientes (${rangeLabel})`} items={topClientes} color="blue" />
+            <TopList title={`Top proveedores (${rangeLabel})`} items={topProveedores} color="gray" />
+            <TopList title={`Gastos por categoría (${rangeLabel})`} items={topGastos} color="red" />
+            <TopList title={`Productos más vendidos (${rangeLabel})`} items={topProductos} color="green" />
+          </div>
+        )
+      })()}
     </div>
   )
 }
