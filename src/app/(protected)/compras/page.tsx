@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { formatMxn, formatDate, todayISO, generateNumeroCompra, formatFormaPago } from '@/lib/format'
+import { formatMxn, formatDate, todayISO, generateNumeroCompra, formatFormaPago, generateSKU, generateLote } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
 import { Btn } from '@/components/ui/Btn'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -207,6 +207,8 @@ export default function ComprasPage() {
       .from('inventario_registros')
       .insert({
         nombre_producto: nombre.trim(),
+        sku: generateSKU(),
+        numero_lote: generateLote(),
         unidad_medida: 'unidad',
         cantidad: 0,
         precio_compra_unitario: 0,
@@ -218,8 +220,10 @@ export default function ComprasPage() {
       .select()
       .single()
     if (error || !data) { toast({ type: 'error', message: `Error al crear producto: ${error?.message}` }); return }
+    setBusquedaProducto('')
+    setProductosResultados([])
     agregarProducto(data as InventarioRegistro)
-    toast({ message: `Producto "${nombre.trim()}" creado`, type: 'success' })
+    toast({ message: `Producto "${nombre.trim()}" creado y agregado`, type: 'success' })
   }
 
   function agregarProducto(p: InventarioRegistro) {
