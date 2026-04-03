@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
 import { formatMxn, formatDate, generateSKU, generateLote } from '@/lib/format'
@@ -87,6 +87,12 @@ export default function InventarioPage() {
   const [totalValor, setTotalValor] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showPdfMenu, setShowPdfMenu] = useState(false)
+
+  // Importación CSV
+  type CsvRow = { id: string; nombre: string; precioNuevo: number; cantidad: number }
+  const [csvPreview, setCsvPreview] = useState<CsvRow[] | null>(null)
+  const [importando, setImportando] = useState(false)
+  const csvInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setHasCamera(typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia)
@@ -477,6 +483,68 @@ export default function InventarioPage() {
     toast({ message: `CSV exportado — ${rows.length} registros`, type: 'success' })
   }
 
+  // Parsea el CSV seleccionado y llena el preview — solo requiere columnas ID + Precio compra unitario
+  function parsearCSV(file: File) {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = (e.target?.result as string).replace(/^\uFEFF/, '') // quitar BOM
+      const lines = text.split(/\r?\n/).filter((l) => l.trim())
+      if (lines.length < 2) { toast({ type: 'error', message: 'El archivo está vacío' }); return }
+
+      // Detectar delimitador (coma o punto y coma)
+      const delim = lines[0].includes(';') ? ';' : ','
+      const headers = lines[0].split(delim).map((h) => h.trim().toLowerCase().replace(/"/g, ''))
+
+      const idIdx = headers.findIndex((h) => h === 'id')
+      const precioIdx = headers.findIndex((h) => h.includes('compra unitario'))
+      const nombreIdx = headers.findIndex((h) => h === 'nombre')
+      const cantIdx = headers.findIndex((h) => h === 'cantidad')
+
+      if (idIdx === -1 || precioIdx === -1) {
+        toast({ type: 'error', message: 'El CSV necesita columnas "ID" y "Precio compra unitario"' }); return
+      }
+
+      const rows: CsvRow[] = []
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(delim).map((c) => c.trim().replace(/^"|"$/g, ''))
+        const id = cols[idIdx]
+        const precioNuevo = parseFloat(cols[precioIdx])
+        const cantidad = cantIdx !== -1 ? parseFloat(cols[cantIdx]) || 0 : 0
+        const nombre = nombreIdx !== -1 ? cols[nombreIdx] : ''
+        if (!id || isNaN(precioNuevo)) continue
+        rows.push({ id, nombre, precioNuevo, cantidad })
+      }
+
+      if (rows.length === 0) { toast({ type: 'error', message: 'No se encontraron filas válidas' }); return }
+      setCsvPreview(rows)
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  // Aplica las actualizaciones de precio al confirmar el preview
+  async function confirmarImportCSV() {
+    if (!csvPreview) return
+    setImportando(true)
+    let ok = 0; let err = 0
+    // Procesar en lotes de 50 para no saturar la conexión
+    const BATCH = 50
+    for (let i = 0; i < csvPreview.length; i += BATCH) {
+      const batch = csvPreview.slice(i, i + BATCH)
+      await Promise.all(batch.map(async (r) => {
+        const updateData: Record<string, number> = { precio_compra_unitario: r.precioNuevo }
+        // Recalcular precio_compra_total solo si tenemos cantidad válida
+        if (r.cantidad > 0) updateData.precio_compra_total = r.precioNuevo * r.cantidad
+        const { error } = await supabase.from('inventario_registros').update(updateData).eq('id', r.id)
+        if (error) err++; else ok++
+      }))
+    }
+    setImportando(false)
+    setCsvPreview(null)
+    if (csvInputRef.current) csvInputRef.current.value = ''
+    toast({ message: `Actualizados ${ok} productos${err > 0 ? ` · ${err} errores` : ''}`, type: err > 0 ? 'error' : 'success' })
+    forceRefresh()
+  }
+
   const totalPages = Math.ceil(totalCount / pageSize)
   const desde = totalCount === 0 ? 0 : (page - 1) * pageSize + 1
   const hasta = Math.min(page * pageSize, totalCount)
@@ -822,7 +890,66 @@ export default function InventarioPage() {
             </svg>
             CSV
           </button>
+          {/* Importar CSV */}
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            title="Actualizar precios desde CSV"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-xl border font-medium transition-colors bg-white border-gray-200 text-[var(--nm-text-muted)] hover:border-blue-400 hover:text-blue-600"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            Importar
+          </button>
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) parsearCSV(f) }}
+          />
         </div>
+
+        {/* Panel preview importación CSV */}
+        {csvPreview && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Importar precios de compra</p>
+                <p className="text-xs text-amber-700 mt-0.5">Se actualizará <span className="font-bold">{csvPreview.length} producto{csvPreview.length !== 1 ? 's' : ''}</span> con el nuevo precio unitario</p>
+              </div>
+              <button onClick={() => { setCsvPreview(null); if (csvInputRef.current) csvInputRef.current.value = '' }} className="text-amber-500 hover:text-amber-700">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+            {/* Muestra hasta 5 filas como muestra */}
+            <div className="bg-white rounded-lg border border-amber-200 overflow-hidden text-xs">
+              <div className="grid grid-cols-3 gap-2 px-3 py-1.5 bg-amber-100 font-semibold text-amber-800">
+                <span>Producto</span><span className="text-right">Cantidad</span><span className="text-right">Precio nuevo</span>
+              </div>
+              {csvPreview.slice(0, 5).map((r) => (
+                <div key={r.id} className="grid grid-cols-3 gap-2 px-3 py-1.5 border-t border-amber-100 text-[var(--nm-text)]">
+                  <span className="truncate">{r.nombre || r.id.slice(0, 8)}</span>
+                  <span className="text-right">{r.cantidad}</span>
+                  <span className="text-right font-medium">${r.precioNuevo.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+                </div>
+              ))}
+              {csvPreview.length > 5 && (
+                <div className="px-3 py-1.5 border-t border-amber-100 text-center text-amber-600 font-medium">
+                  + {csvPreview.length - 5} más…
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => { setCsvPreview(null); if (csvInputRef.current) csvInputRef.current.value = '' }} className="flex-1 py-2 text-sm rounded-lg border border-gray-200 text-[var(--nm-text-muted)] hover:border-gray-400 bg-white font-medium">
+                Cancelar
+              </button>
+              <button onClick={confirmarImportCSV} disabled={importando} className="flex-1 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold disabled:opacity-50">
+                {importando ? 'Actualizando…' : `Confirmar ${csvPreview.length} productos`}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Panel de filtros colapsable */}
         {showFiltros && (
