@@ -1,4 +1,4 @@
-export type FormaPago = 'efectivo' | 'bonos_gasolina' | 'transferencia' | 'tarjeta_credito' | 'tarjeta_debito' | 'mixto' | 'otro'
+export type FormaPago = 'efectivo' | 'bonos_gasolina' | 'transferencia' | 'tarjeta_credito' | 'tarjeta_debito' | 'mixto' | 'otro' | 'credito'
 export type StatusPago = 'pendiente' | 'parcial' | 'pagado'
 export type FacturaStatus = 'borrador' | 'emitida' | 'pagada' | 'cancelada'
 export type FacturaTipo = 'ingreso' | 'egreso' | 'nota_credito' | 'devolucion'

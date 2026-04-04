@@ -697,11 +697,55 @@ export default function VentasPage() {
               />
             </FormField>
             <FormField label="Forma de pago">
-              <Select value={form.forma_pago} onChange={(e) => setForm((f) => ({ ...f, forma_pago: e.target.value as FormaPago }))}>
+              <Select value={form.forma_pago} onChange={(e) => {
+                const fp = e.target.value as FormaPago
+                // Al seleccionar crédito: status pendiente + fecha_vencimiento según días del cliente
+                if (fp === 'credito') {
+                  const cl = clientes.find((c) => c.id === form.cliente_id) as (Cliente & { dias_credito: number }) | undefined
+                  const dias = cl?.dias_credito ?? 30
+                  const venc = new Date(form.fecha || new Date())
+                  venc.setDate(venc.getDate() + dias)
+                  setForm((f) => ({
+                    ...f,
+                    forma_pago: fp,
+                    status_pago: 'pendiente',
+                    fecha_vencimiento: venc.toISOString().split('T')[0],
+                  }))
+                } else {
+                  setForm((f) => ({ ...f, forma_pago: fp }))
+                }
+              }}>
                 {FORMAS_PAGO.map((fp) => <option key={fp.value} value={fp.value}>{fp.label}</option>)}
               </Select>
             </FormField>
           </div>
+
+          {/* Tarjeta resumen de crédito */}
+          {form.forma_pago === 'credito' && (() => {
+            const cl = clientes.find((c) => c.id === form.cliente_id) as (Cliente & { limite_credito: number; dias_credito: number }) | undefined
+            return (
+              <div className="border border-blue-200 bg-blue-50 rounded-xl p-3 flex flex-col gap-1.5">
+                <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Venta a crédito</p>
+                <div className="flex gap-4 flex-wrap text-sm">
+                  <div>
+                    <p className="text-xs text-blue-600">Límite</p>
+                    <p className="font-bold text-blue-900">{cl && cl.limite_credito > 0 ? formatMxn(cl.limite_credito) : 'Sin límite'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-600">Plazo</p>
+                    <p className="font-bold text-blue-900">{cl?.dias_credito ?? 30} días</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-blue-600">Vence</p>
+                    <p className="font-bold text-blue-900">{form.fecha_vencimiento ? formatDate(form.fecha_vencimiento) : '—'}</p>
+                  </div>
+                </div>
+                {!form.cliente_id && (
+                  <p className="text-xs text-amber-700 mt-1">⚠ Selecciona un cliente para calcular el plazo correcto</p>
+                )}
+              </div>
+            )
+          })()}
 
           {form.forma_pago === 'mixto' && (
             <div className="border border-gray-200 rounded-xl p-3 bg-gray-50 flex flex-col gap-2">

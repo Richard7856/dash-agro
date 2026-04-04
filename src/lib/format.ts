@@ -22,6 +22,7 @@ export function formatFormaPago(fp: FormaPago): string {
     bonos_gasolina:  'Bonos gasolina',
     mixto:           'Mixto',
     otro:            'Otro',
+    credito:         'Crédito',
   }
   return labels[fp] ?? fp
 }
