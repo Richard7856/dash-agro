@@ -31,6 +31,18 @@ interface VentaItemLocal {
   lote: string | null
   cantidad: string
   precio_unitario: string
+  descuento_tipo: 'pct' | 'monto'
+  descuento_valor: string
+}
+
+// Calcula el subtotal de un item incluyendo descuento
+function calcSubtotal(item: Pick<VentaItemLocal, 'cantidad' | 'precio_unitario' | 'descuento_tipo' | 'descuento_valor'>): number {
+  const cant = parseFloat(item.cantidad) || 0
+  const precio = parseFloat(item.precio_unitario) || 0
+  const dto = parseFloat(item.descuento_valor) || 0
+  const bruto = cant * precio
+  if (item.descuento_tipo === 'pct') return bruto * (1 - Math.min(dto, 100) / 100)
+  return Math.max(0, bruto - dto)
 }
 
 const emptyForm = () => ({
@@ -105,8 +117,7 @@ export default function VentasPage() {
     if (descPct <= 0) return
     setItems((prev) => prev.map((item) => {
       if (item.precio_venta_publico <= 0) return item
-      const nuevo = parseFloat((item.precio_venta_publico * (1 - descPct / 100)).toFixed(2))
-      return { ...item, precio_unitario: String(nuevo) }
+      return { ...item, descuento_tipo: 'pct' as const, descuento_valor: String(descPct) }
     }))
   // Solo cuando cambia el cliente — no en cada render de items
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,11 +141,9 @@ export default function VentasPage() {
     return () => clearTimeout(t)
   }, [busquedaProducto])
 
-  // Auto-total desde items
+  // Auto-total desde items (incluye descuento por item)
   const montoCalculado = items.reduce((s, i) => {
-    const c = parseFloat(i.cantidad) || 0
-    const p = parseFloat(i.precio_unitario) || 0
-    return s + c * p
+    return s + calcSubtotal(i)
   }, 0)
 
   const tieneItems = items.length > 0
@@ -277,6 +286,9 @@ export default function VentasPage() {
       lote: it.inventario_registros?.numero_lote ?? null,
       cantidad: String(it.cantidad),
       precio_unitario: String(it.precio_unitario),
+      // Al editar, descuentos no están en BD — se muestran sin descuento para re-aplicar si se desea
+      descuento_tipo: 'pct' as const,
+      descuento_valor: '',
     }))
 
     setItems(loaded)
@@ -311,6 +323,8 @@ export default function VentasPage() {
       lote: p.numero_lote ?? null,
       cantidad: '1',
       precio_unitario: precioConDescuento,
+      descuento_tipo: 'pct',
+      descuento_valor: descPct > 0 ? String(descPct) : '',
     }])
     setBusquedaProducto('')
     setProductosResultados([])
@@ -440,6 +454,8 @@ export default function VentasPage() {
         inventario_registro_id: item.inventario_registro_id,
         cantidad: cant,
         precio_unitario: precio,
+        // total refleja precio × cantidad menos descuento aplicado al item
+        total: calcSubtotal(item),
       })
 
       const { data: inv } = await supabase
@@ -475,7 +491,8 @@ export default function VentasPage() {
             descripcion: it.nombre,
             cantidad: parseFloat(it.cantidad) || 0,
             precio_unitario: parseFloat(it.precio_unitario) || 0,
-            total: (parseFloat(it.cantidad) || 0) * (parseFloat(it.precio_unitario) || 0),
+            // Usa calcSubtotal para que la remisión refleje el mismo descuento que la venta
+            total: calcSubtotal(it),
           }))
         if (partidas.length > 0) {
           await supabase.from('facturas_partidas').insert(partidas)
@@ -591,85 +608,101 @@ export default function VentasPage() {
                   const tienePrecios = item.precio_venta_publico > 0 || item.precio_distribuidor > 0 || item.precio_minimo_prod > 0
                   // Precio mínimo para alerta visual
                   const bajoPrecioMinimo = item.precio_minimo_prod > 0 && precio < item.precio_minimo_prod && precio > 0
+                  const dto = parseFloat(item.descuento_valor) || 0
+                  const subtotalFinal = calcSubtotal(item)
+                  const descuentoMonto = (cant * precio) - subtotalFinal
                   return (
-                    <div key={item.inventario_registro_id} className={`rounded-lg p-2 border text-sm ${sinStock ? 'bg-amber-50 border-amber-200' : stockMinBajo ? 'bg-orange-50 border-orange-200' : 'bg-gray-50 border-gray-200'}`}>
-                      <div className="flex items-start justify-between gap-2">
+                    <div key={item.inventario_registro_id} className={`rounded-xl border text-sm overflow-hidden ${sinStock ? 'border-amber-300' : stockMinBajo ? 'border-orange-200' : 'border-gray-200'}`}>
+                      {/* Header del item — nombre + eliminar */}
+                      <div className={`flex items-center justify-between gap-2 px-3 py-2 ${sinStock ? 'bg-amber-50' : stockMinBajo ? 'bg-orange-50' : 'bg-gray-50'}`}>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-[var(--nm-text)] truncate">{item.nombre}</p>
-                          {item.lote && <p className="text-xs text-[var(--nm-text-subtle)]">Lote: {item.lote}</p>}
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            Stock: {item.disponible} {item.unidad}
-                            {item.stock_minimo > 0 && <span className={stockMinBajo ? ' · ⚠ mín {item.stock_minimo}' : ` · mín ${item.stock_minimo}`}> · mín {item.stock_minimo}</span>}
+                          <p className="font-semibold text-[var(--nm-text)] text-sm leading-tight truncate">{item.nombre}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            {item.lote && <span>L: {item.lote} · </span>}
+                            Stock: <span className={sinStock ? 'text-amber-600 font-medium' : ''}>{item.disponible}</span> {item.unidad}
                             {' · '}Costo: {formatMxn(item.precio_compra)}
                           </p>
-                          {sinStock && (
-                            <p className="text-xs text-amber-600 font-medium">⚠ Solo {item.disponible} {item.unidad} disponibles</p>
-                          )}
-                          {!sinStock && stockMinBajo && (
-                            <p className="text-xs text-orange-600 font-medium">⚠ Stock por debajo del mínimo</p>
-                          )}
+                          {sinStock && <p className="text-[10px] text-amber-600 font-semibold">⚠ Solo {item.disponible} disponibles</p>}
+                          {!sinStock && stockMinBajo && <p className="text-[10px] text-orange-600 font-semibold">⚠ Stock bajo el mínimo</p>}
                         </div>
-                        <button type="button" onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600 shrink-0 mt-0.5">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
+                        <button type="button" onClick={() => removeItem(idx)} className="text-red-400 active:text-red-600 shrink-0 p-1">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                         </button>
                       </div>
 
-                      {/* Selector rápido de lista de precio */}
-                      {tienePrecios && (
-                        <div className="flex gap-1 mt-1.5 flex-wrap">
-                          <span className="text-[10px] text-gray-400 self-center mr-0.5">Aplicar:</span>
-                          {item.precio_venta_publico > 0 && (
-                            <button type="button"
-                              onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_venta_publico) } : it))}
-                              className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium">
-                              Público {formatMxn(item.precio_venta_publico)}
-                            </button>
-                          )}
-                          {item.precio_distribuidor > 0 && (
-                            <button type="button"
-                              onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_distribuidor) } : it))}
-                              className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 font-medium">
-                              Dist. {formatMxn(item.precio_distribuidor)}
-                            </button>
-                          )}
-                          {item.precio_minimo_prod > 0 && (
-                            <button type="button"
-                              onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_minimo_prod) } : it))}
-                              className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 font-medium">
-                              Mín {formatMxn(item.precio_minimo_prod)}
-                            </button>
-                          )}
-                        </div>
-                      )}
+                      <div className="px-3 pt-2 pb-3 bg-white">
+                        {/* Chips de precio rápido */}
+                        {tienePrecios && (
+                          <div className="flex gap-1 mb-2 flex-wrap">
+                            {item.precio_venta_publico > 0 && (
+                              <button type="button" onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_venta_publico) } : it))}
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors ${parseFloat(item.precio_unitario) === item.precio_venta_publico ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'}`}>
+                                Público {formatMxn(item.precio_venta_publico)}
+                              </button>
+                            )}
+                            {item.precio_distribuidor > 0 && (
+                              <button type="button" onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_distribuidor) } : it))}
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors ${parseFloat(item.precio_unitario) === item.precio_distribuidor ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'}`}>
+                                Dist. {formatMxn(item.precio_distribuidor)}
+                              </button>
+                            )}
+                            {item.precio_minimo_prod > 0 && (
+                              <button type="button" onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: String(it.precio_minimo_prod) } : it))}
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors ${parseFloat(item.precio_unitario) === item.precio_minimo_prod ? 'bg-gray-600 text-white border-gray-600' : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}>
+                                Mín {formatMxn(item.precio_minimo_prod)}
+                              </button>
+                            )}
+                          </div>
+                        )}
 
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <div>
-                          <label className="text-xs text-[var(--nm-text-subtle)]">Cantidad ({item.unidad})</label>
-                          <input
-                            type="number" min="0.001" step="0.001"
-                            value={item.cantidad}
-                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: e.target.value } : it))}
-                            className="w-full mt-0.5 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500"
-                          />
+                        {/* Campos: Precio | Cantidad | Descuento */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Precio</label>
+                            <input type="number" min="0" step="0.01" placeholder="0.00"
+                              value={item.precio_unitario}
+                              onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: e.target.value } : it))}
+                              className={`w-full mt-0.5 px-2 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400 ${bajoPrecioMinimo ? 'border-red-300' : 'border-gray-200'}`}
+                            />
+                            {bajoPrecioMinimo && <p className="text-[9px] text-red-500 mt-0.5">Bajo el mínimo</p>}
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Cant. ({item.unidad})</label>
+                            <input type="number" min="0.001" step="0.001"
+                              value={item.cantidad}
+                              onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cantidad: e.target.value } : it))}
+                              className="w-full mt-0.5 px-2 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Descuento</label>
+                            <div className="flex mt-0.5">
+                              <input type="number" min="0" step="0.01" placeholder="0"
+                                value={item.descuento_valor}
+                                onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, descuento_valor: e.target.value } : it))}
+                                className="w-full px-2 py-2 text-sm border border-r-0 border-gray-200 rounded-l-lg bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-400"
+                              />
+                              <button type="button"
+                                onClick={() => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, descuento_tipo: it.descuento_tipo === 'pct' ? 'monto' : 'pct', descuento_valor: '' } : it))}
+                                className="px-2 py-2 text-xs font-bold border border-gray-200 rounded-r-lg bg-gray-50 text-gray-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors shrink-0 w-9">
+                                {item.descuento_tipo === 'pct' ? '%' : '$'}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label className="text-xs text-[var(--nm-text-subtle)]">Precio venta (MXN)</label>
-                          <input
-                            type="number" min="0" step="0.01" placeholder="0.00"
-                            value={item.precio_unitario}
-                            onChange={(e) => setItems((prev) => prev.map((it, i) => i === idx ? { ...it, precio_unitario: e.target.value } : it))}
-                            className={`w-full mt-0.5 px-2 py-1.5 text-sm border rounded-lg bg-white focus:outline-none focus:border-blue-500 ${bajoPrecioMinimo ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
-                          />
-                          {bajoPrecioMinimo && (
-                            <p className="text-[10px] text-red-500 mt-0.5">Por debajo del precio mínimo</p>
+
+                        {/* Total del item */}
+                        <div className="flex items-center justify-between mt-2">
+                          {descuentoMonto > 0 && (
+                            <p className="text-[11px] text-gray-400">
+                              {cant} × {formatMxn(precio)} {dto > 0 && <span className="text-green-600">− {formatMxn(descuentoMonto)}</span>}
+                            </p>
                           )}
+                          <p className={`text-base font-bold ml-auto ${subtotalFinal > 0 ? 'text-blue-700' : 'text-gray-400'}`}>
+                            {formatMxn(subtotalFinal)}
+                          </p>
                         </div>
                       </div>
-                      {subtotal > 0 && (
-                        <p className="text-xs text-blue-700 font-semibold mt-1 text-right">{formatMxn(subtotal)}</p>
-                      )}
                     </div>
                   )
                 })}
