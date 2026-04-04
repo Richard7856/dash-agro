@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { formatMxn, formatDate, todayISO, generateNumeroVenta, formatFormaPago } from '@/lib/format'
 import { FormField, Input, Select, Textarea } from '@/components/ui/FormField'
@@ -82,6 +82,11 @@ export default function VentasPage() {
   const [buscandoProducto, setBuscandoProducto] = useState(false)
   // Filtro dentro del carrito de items ya agregados
   const [busquedaCarrito, setBusquedaCarrito] = useState('')
+
+  // Import CSV al carrito
+  const csvCarritoRef = useRef<HTMLInputElement>(null)
+  const [csvCarritoPreview, setCsvCarritoPreview] = useState<{ nombre: string; cantidad: number; precio: number; encontrado: boolean }[]>([])
+  const [importandoCSV, setImportandoCSV] = useState(false)
 
   // Filtros
   const [busqueda, setBusqueda] = useState('')
@@ -336,6 +341,90 @@ export default function VentasPage() {
     setItems((prev) => prev.filter((_, i) => i !== idx))
   }
 
+  // Lee un CSV y busca cada fila en inventario para pre-visualizar antes de confirmar
+  async function handleCSVCarrito(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setImportandoCSV(true)
+    setCsvCarritoPreview([])
+
+    const text = await file.text()
+    // Detectar delimitador (coma o punto y coma)
+    const delim = text.includes(';') ? ';' : ','
+    const lines = text.replace(/^\uFEFF/, '').split('\n').map((l) => l.trim()).filter(Boolean)
+    if (lines.length < 2) { setImportandoCSV(false); return }
+
+    const headers = lines[0].split(delim).map((h) => h.toLowerCase().trim().replace(/['"]/g, ''))
+
+    // Detectar columnas: producto (nombre/sku/ean), cantidad, precio (opcional)
+    const colProducto = headers.findIndex((h) => h.includes('product') || h.includes('nombre') || h.includes('sku') || h.includes('ean') || h.includes('artículo') || h.includes('articulo'))
+    const colCantidad = headers.findIndex((h) => h.includes('cant') || h.includes('qty') || h.includes('piezas'))
+    const colPrecio = headers.findIndex((h) => h.includes('precio') || h.includes('price') || h.includes('venta'))
+
+    if (colProducto < 0 || colCantidad < 0) {
+      toast({ type: 'error', message: 'No se encontraron columnas de producto y cantidad en el CSV' })
+      setImportandoCSV(false)
+      return
+    }
+
+    const preview: typeof csvCarritoPreview = []
+    for (const line of lines.slice(1)) {
+      const cols = line.split(delim).map((c) => c.trim().replace(/^["']|["']$/g, ''))
+      const termino = cols[colProducto]
+      const cantidad = parseFloat(cols[colCantidad]) || 1
+      const precioCSV = colPrecio >= 0 ? parseFloat(cols[colPrecio]) || 0 : 0
+      if (!termino) continue
+
+      // Buscar en inventario por nombre, sku o ean
+      const term = `%${termino}%`
+      const { data } = await supabase
+        .from('inventario_registros')
+        .select('id, nombre_producto, unidad_medida, cantidad, stock_minimo, precio_compra_unitario, precio_venta_publico, precio_distribuidor, precio_minimo, numero_lote')
+        .or(`nombre_producto.ilike.${term},sku.ilike.${term},ean.ilike.${term}`)
+        .limit(1)
+
+      const prod = data?.[0] as any
+      preview.push({
+        nombre: prod?.nombre_producto ?? termino,
+        cantidad,
+        precio: precioCSV > 0 ? precioCSV : (prod?.precio_venta_publico ?? 0),
+        encontrado: !!prod,
+      })
+
+      // Si se encontró y no está ya en el carrito, agregar directo
+      if (prod && !items.some((i) => i.inventario_registro_id === prod.id)) {
+        const clienteActual = clientes.find((c) => c.id === form.cliente_id) as (Cliente & { descuento_pct: number }) | undefined
+        const descPct = clienteActual?.descuento_pct ?? 0
+        const precio = precioCSV > 0 ? precioCSV : (prod.precio_venta_publico ?? 0)
+        setItems((prev) => [...prev, {
+          inventario_registro_id: prod.id,
+          nombre: prod.nombre_producto,
+          unidad: prod.unidad_medida,
+          disponible: prod.cantidad,
+          stock_minimo: prod.stock_minimo,
+          precio_compra: prod.precio_compra_unitario,
+          precio_venta_publico: prod.precio_venta_publico,
+          precio_distribuidor: prod.precio_distribuidor,
+          precio_minimo_prod: prod.precio_minimo,
+          lote: prod.numero_lote ?? null,
+          cantidad: String(cantidad),
+          precio_unitario: String(precio),
+          descuento_tipo: 'pct' as const,
+          descuento_valor: descPct > 0 ? String(descPct) : '',
+        }])
+      }
+    }
+
+    setCsvCarritoPreview(preview)
+    setImportandoCSV(false)
+    const encontrados = preview.filter((p) => p.encontrado).length
+    toast({
+      type: encontrados === preview.length ? 'success' : 'error',
+      message: `${encontrados}/${preview.length} productos encontrados e importados`,
+    })
+  }
+
   async function handleDelete(id: string) {
     if (!confirm('¿Eliminar esta venta?')) return
 
@@ -540,9 +629,43 @@ export default function VentasPage() {
 
           {/* Productos de inventario */}
           <div className="border border-gray-200 rounded-xl p-3 bg-white">
-            <p className="text-sm font-semibold text-[var(--nm-text)] mb-2">Productos vendidos</p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-[var(--nm-text)]">Productos vendidos</p>
+              <button
+                type="button"
+                onClick={() => csvCarritoRef.current?.click()}
+                disabled={importandoCSV}
+                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:bg-blue-200 transition-colors disabled:opacity-50"
+              >
+                {importandoCSV ? (
+                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                )}
+                Importar CSV
+              </button>
+              <input ref={csvCarritoRef} type="file" accept=".csv" className="hidden" onChange={handleCSVCarrito} />
+            </div>
 
-            {/* Buscador */}
+            {/* Resultados de importación CSV */}
+            {csvCarritoPreview.length > 0 && (
+              <div className="mb-2 border border-amber-200 bg-amber-50 rounded-lg p-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-amber-800">Resultado importación CSV</p>
+                  <button type="button" onClick={() => setCsvCarritoPreview([])} className="text-amber-500 hover:text-amber-700">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                {csvCarritoPreview.map((row, i) => (
+                  <div key={i} className={`flex items-center justify-between text-xs py-0.5 ${!row.encontrado ? 'text-red-600' : 'text-amber-800'}`}>
+                    <span className="truncate flex-1">{row.encontrado ? '✓' : '✗'} {row.nombre}</span>
+                    <span className="ml-2 shrink-0">{row.cantidad} × {formatMxn(row.precio)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Buscador manual */}
             <div className="relative mb-2">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--nm-text-subtle)] pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
