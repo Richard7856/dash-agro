@@ -21,6 +21,7 @@ interface ProductoBasic {
   nombre_producto: string
   unidad_medida: UnidadMedida
   cantidad: number | null
+  precio_compra_unitario: number | null
   ean: string | null
   sku: string | null
 }
@@ -102,7 +103,7 @@ export default function OrdenesCompraPage() {
       setBuscandoProducto(true)
       const { data } = await supabase
         .from('inventario_registros')
-        .select('id, nombre_producto, unidad_medida, cantidad, ean, sku')
+        .select('id, nombre_producto, unidad_medida, cantidad, precio_compra_unitario, ean, sku')
         .or(`nombre_producto.ilike.%${busquedaProducto}%,ean.ilike.%${busquedaProducto}%,sku.ilike.%${busquedaProducto}%`)
         .order('nombre_producto')
         .limit(10)
@@ -118,7 +119,7 @@ export default function OrdenesCompraPage() {
       descripcion: prod.nombre_producto,
       unidad: prod.unidad_medida,
       cantidad: '1',
-      precio_unitario: '0',
+      precio_unitario: String(prod.precio_compra_unitario ?? 0),
       descuento_pct: '0',
       con_iva: true,
     }])
