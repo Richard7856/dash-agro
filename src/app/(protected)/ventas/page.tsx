@@ -1157,14 +1157,17 @@ export default function VentasPage() {
                         <span>{formatFormaPago(v.forma_pago)}</span>
                         {v.gastos_extras ? <span>+{formatMxn(v.gastos_extras)} extras</span> : null}
                       </div>
-                      {/* Chips de productos */}
+                      {/* Resumen de productos — máx 3 + contador para no saturar */}
                       {ventaItems && ventaItems.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-2">
-                          {ventaItems.map((it, idx) => (
-                            <span key={idx} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5">
+                        <div className="flex flex-wrap gap-1 mt-1.5 items-center">
+                          {ventaItems.slice(0, 3).map((it, idx) => (
+                            <span key={idx} className="text-xs bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 max-w-[160px] truncate">
                               {it.inventario_registros?.nombre_producto ?? '—'} ×{it.cantidad}
                             </span>
                           ))}
+                          {ventaItems.length > 3 && (
+                            <span className="text-xs text-gray-400 font-medium">+{ventaItems.length - 3} más</span>
+                          )}
                         </div>
                       )}
                       {v.notas && <p className="text-xs text-[var(--nm-text-subtle)] mt-1 line-clamp-1">{v.notas}</p>}
