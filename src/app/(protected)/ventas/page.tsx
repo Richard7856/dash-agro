@@ -723,29 +723,35 @@ export default function VentasPage() {
 
             {/* Lista de ítems seleccionados */}
             {items.length > 0 && (
-              <div className="mb-2">
-                {/* Buscador dentro del carrito — visible solo con 3+ items */}
-                {items.length >= 3 && (
-                  <div className="relative mb-2">
-                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                    </svg>
-                    <input
-                      type="text"
-                      placeholder="Filtrar productos en el carrito…"
-                      value={busquedaCarrito}
-                      onChange={(e) => setBusquedaCarrito(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 text-[var(--nm-text)] placeholder:text-gray-400"
-                    />
-                    {busquedaCarrito && (
-                      <button type="button" onClick={() => setBusquedaCarrito('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                      </button>
-                    )}
-                  </div>
-                )}
-                {/* Contenedor con scroll: máximo ~3 items visibles */}
-                <div className={`flex flex-col gap-2 ${items.length > 3 ? 'max-h-[420px] overflow-y-auto pr-0.5' : ''}`}>
+              <div className="mb-2 border border-gray-100 rounded-xl overflow-hidden">
+                {/* Header del carrito: contador + buscador */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span className="text-xs font-semibold text-gray-600 shrink-0">{items.length} en carrito</span>
+                  {items.length >= 3 && (
+                    <div className="relative flex-1">
+                      <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Filtrar…"
+                        value={busquedaCarrito}
+                        onChange={(e) => setBusquedaCarrito(e.target.value)}
+                        className="w-full pl-6 pr-6 py-1 text-xs bg-white border border-gray-200 rounded-md focus:outline-none focus:border-blue-400 placeholder:text-gray-400"
+                      />
+                      {busquedaCarrito && (
+                        <button type="button" onClick={() => setBusquedaCarrito('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Contenedor con scroll — max 3 tarjetas visibles, inline style para evitar purge de Tailwind */}
+                <div
+                  className="flex flex-col gap-2 p-2 overflow-y-auto"
+                  style={items.length > 3 ? { maxHeight: '480px' } : undefined}
+                >
                 {items.filter((item) => !busquedaCarrito.trim() || item.nombre.toLowerCase().includes(busquedaCarrito.toLowerCase())).map((item, _origIdx) => {
                   const idx = items.indexOf(item)
                   const cant = parseFloat(item.cantidad) || 0
@@ -859,8 +865,7 @@ export default function VentasPage() {
             )}
 
             {tieneItems && (
-              <div className="flex items-center justify-between px-1">
-                <span className="text-xs text-[var(--nm-text-subtle)]">{items.length} producto{items.length !== 1 ? 's' : ''}</span>
+              <div className="flex items-center justify-end px-1 mt-1">
                 <span className="text-sm font-bold text-blue-700">Total: {formatMxn(montoCalculado)}</span>
               </div>
             )}
