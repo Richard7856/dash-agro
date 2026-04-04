@@ -80,6 +80,8 @@ export default function VentasPage() {
   const [busquedaProducto, setBusquedaProducto] = useState('')
   const [productosResultados, setProductosResultados] = useState<InventarioRegistro[]>([])
   const [buscandoProducto, setBuscandoProducto] = useState(false)
+  // Filtro dentro del carrito de items ya agregados
+  const [busquedaCarrito, setBusquedaCarrito] = useState('')
 
   // Filtros
   const [busqueda, setBusqueda] = useState('')
@@ -598,8 +600,31 @@ export default function VentasPage() {
 
             {/* Lista de ítems seleccionados */}
             {items.length > 0 && (
-              <div className="flex flex-col gap-2 mb-2">
-                {items.map((item, idx) => {
+              <div className="mb-2">
+                {/* Buscador dentro del carrito — visible solo con 3+ items */}
+                {items.length >= 3 && (
+                  <div className="relative mb-2">
+                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Filtrar productos en el carrito…"
+                      value={busquedaCarrito}
+                      onChange={(e) => setBusquedaCarrito(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 text-[var(--nm-text)] placeholder:text-gray-400"
+                    />
+                    {busquedaCarrito && (
+                      <button type="button" onClick={() => setBusquedaCarrito('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                      </button>
+                    )}
+                  </div>
+                )}
+                {/* Contenedor con scroll: máximo ~3 items visibles */}
+                <div className={`flex flex-col gap-2 ${items.length > 3 ? 'max-h-[420px] overflow-y-auto pr-0.5' : ''}`}>
+                {items.filter((item) => !busquedaCarrito.trim() || item.nombre.toLowerCase().includes(busquedaCarrito.toLowerCase())).map((item, _origIdx) => {
+                  const idx = items.indexOf(item)
                   const cant = parseFloat(item.cantidad) || 0
                   const precio = parseFloat(item.precio_unitario) || 0
                   const subtotal = cant * precio
@@ -706,6 +731,7 @@ export default function VentasPage() {
                     </div>
                   )
                 })}
+                </div>
               </div>
             )}
 
